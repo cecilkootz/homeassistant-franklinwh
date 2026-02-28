@@ -20,7 +20,10 @@ The integration exists and works. This migration moves all integration files fro
   2. Repository root contains only `README.md`, `hacs.json`, `LICENSE`, and `.github/` — no loose Python or JSON integration files
   3. `hacs.json` has no `content_in_root` key and no `zip_release` key
   4. All file moves were made via `git mv` (file history preserved) and land in a single atomic commit
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 01-01-PLAN.md — Move 11 integration files via git mv, update hacs.json, create atomic commit
 
 ### Phase 2: Verification and Documentation
 **Goal**: Migration is confirmed correct at runtime and existing users have clear guidance
@@ -39,5 +42,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. File Relocation | 0/? | Not started | - |
+| 1. File Relocation | 0/1 | Not started | - |
 | 2. Verification and Documentation | 0/? | Not started | - |
