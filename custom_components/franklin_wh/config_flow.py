@@ -4,7 +4,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import franklinwh
+from . import franklinwh as franklinwh_lib
+from homeassistant.helpers.httpx_client import get_async_client
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -36,20 +37,16 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     gateway_id = data[CONF_GATEWAY_ID]
     
     try:
-        # Create token fetcher and client in executor to avoid blocking
-        def create_client():
-            token_fetcher = franklinwh.TokenFetcher(username, password)
-            return franklinwh.Client(token_fetcher, gateway_id)
-        
-        client = await hass.async_add_executor_job(create_client)
-        
-        # Try to fetch data to validate credentials and gateway
-        stats = await hass.async_add_executor_job(client.get_stats)
-        
+        http_session = get_async_client(hass)
+        token_fetcher = franklinwh_lib.TokenFetcher(username, password, session=http_session)
+        client = franklinwh_lib.Client(token_fetcher, gateway_id, session=http_session)
+
+        # Validate by fetching stats (async, no executor needed)
+        stats = await client.get_stats()
+
         if stats is None:
             raise CannotConnect("Unable to fetch data from FranklinWH")
-        
-        # Return info that you want to store in the config entry.
+
         return {
             "title": f"FranklinWH {gateway_id[-6:]}",
             "gateway_id": gateway_id,
