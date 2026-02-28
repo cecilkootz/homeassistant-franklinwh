@@ -1,32 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Fix Blocking HTTP Client
-status: unknown
-last_updated: "2026-02-28T02:32:16.426Z"
+milestone: v1.2
+milestone_name: SunSpec/Modbus Local API
+status: in_progress
+last_updated: "2026-02-27T00:00:00.000Z"
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-28 after v1.1 milestone)
+See: .planning/PROJECT.md (updated 2026-02-27 after v1.2 milestone start)
 
 **Core value:** FranklinWH energy management data and controls in Home Assistant via first-class HACS integration
-**Current focus:** Planning next milestone
+**Current focus:** Phase: Not started (defining requirements)
 
 ## Current Position
 
-Milestone: v1.1 SHIPPED (2026-02-28)
-Status: Milestone complete — planning next milestone
-Last activity: 2026-02-28 — Completed and archived v1.1 milestone
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-27 — Milestone v1.2 started
 
-Progress: [██████████] 100% (v1.1 complete)
+Progress: [░░░░░░░░░░] 0% (v1.2 in progress)
 
 ## Performance Metrics
 

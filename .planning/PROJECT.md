@@ -2,7 +2,17 @@
 
 ## What This Is
 
-A Home Assistant custom integration for FranklinWH energy management systems, installable via HACS using the standard `custom_components/franklin_wh/` directory structure. The integration polls the FranklinWH cloud API and exposes sensors (battery SoC, energy flow, grid status) and switches (operation mode, battery reserve) to Home Assistant.
+A Home Assistant custom integration for FranklinWH energy management systems, installable via HACS using the standard `custom_components/franklin_wh/` directory structure. The integration supports two data paths: cloud API polling (always required for writes) and optional local SunSpec Modbus TCP polling for faster real-time sensor data. Exposes sensors (battery SoC, energy flow, grid status) and switches (operation mode, battery reserve) to Home Assistant.
+
+## Current Milestone: v1.2 SunSpec/Modbus Local API
+
+**Goal:** Add a local Modbus TCP data path that replaces cloud reads with faster SunSpec polling while keeping cloud for write operations.
+
+**Target features:**
+- SunSpec Modbus TCP client reading Models 502, 701, 713, 714
+- Config flow UI for host, port, slave ID
+- Hybrid coordinator: local reads at 10s interval, cloud writes always
+- Graceful fallback to cloud when Modbus unavailable
 
 ## Core Value
 
@@ -33,13 +43,18 @@ FranklinWH energy management data and controls available in Home Assistant via a
 
 ### Active
 
-(No active requirements — planning next milestone)
+- [ ] User can configure Modbus TCP host, port (default 502), and slave ID (default 1) during setup — v1.2
+- [ ] User can enable/disable local Modbus via options flow — v1.2
+- [ ] Integration reads battery SoC, DC power, solar power, grid AC power from SunSpec at 10s interval — v1.2
+- [ ] Write operations (set_operation_mode, set_battery_reserve, switches) always use cloud — v1.2
+- [ ] Sensors without Modbus equivalent fall back to cloud data — v1.2
+- [ ] Modbus failures degrade gracefully without marking integration unavailable — v1.2
 
 ### Out of Scope
 
-- Adding new integration features — separate from structural work
 - Adding tests — separate concern
 - Fixing config_flow.py executor/coroutine bug — deferred
+- Modbus write support (set_operation_mode via Modbus) — no confirmed register mapping
 - Mobile app / video chat — not applicable
 
 ## Context
@@ -64,6 +79,7 @@ FranklinWH energy management data and controls available in Home Assistant via a
 - **Compatibility**: Must continue to work as a Home Assistant custom integration
 - **HACS**: Must pass HACS validation (directory structure at `custom_components/franklin_wh/`)
 - **Functional parity**: Vendored library must be functionally identical to upstream except for session injection
+- **Blocking I/O**: pySunSpec2 Modbus client is synchronous — must run in executor, never on HA event loop
 
 ## Key Decisions
 
@@ -80,4 +96,4 @@ FranklinWH energy management data and controls available in Home Assistant via a
 | Pass HA httpx session at construction (not stored globally) | Avoids shared mutable state; each coordinator owns its session reference | ✓ Good — clean dependency injection |
 
 ---
-*Last updated: 2026-02-28 after v1.1 milestone*
+*Last updated: 2026-02-27 after v1.2 milestone start*
