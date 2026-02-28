@@ -33,7 +33,10 @@ Plans:
   1. GitHub Actions `hacs/action` workflow passes on the migrated branch
   2. GitHub Actions `hassfest` workflow passes on the migrated branch
   3. README installation instructions reference standard HACS install (no custom path or `content_in_root` mention)
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 02-01-PLAN.md — Remove empty root translations/ dir, verify README, confirm CI passes for hacs/action and hassfest
 
 ## Progress
 
@@ -43,4 +46,4 @@ Phases execute in numeric order: 1 → 2
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. File Relocation | 1/1 | Complete   | 2026-02-28 |
-| 2. Verification and Documentation | 0/? | Not started | - |
+| 2. Verification and Documentation | 0/1 | Not started | - |
