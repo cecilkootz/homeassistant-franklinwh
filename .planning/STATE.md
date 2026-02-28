@@ -5,7 +5,7 @@ milestone_name: SunSpec/Modbus Local API
 status: in_progress
 last_updated: "2026-02-27T00:00:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27 after v1.2 milestone start)
 
 **Core value:** FranklinWH energy management data and controls in Home Assistant via first-class HACS integration
-**Current focus:** Phase: Not started (defining requirements)
+**Current focus:** Phase 4 — Modbus Client Layer
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 4 — Modbus Client Layer
 Plan: —
-Status: Defining requirements
-Last activity: 2026-02-27 — Milestone v1.2 started
+Status: Not started
+Last activity: 2026-02-27 — v1.2 roadmap created (Phases 4-6)
 
 Progress: [░░░░░░░░░░] 0% (v1.2 in progress)
 
@@ -61,6 +61,16 @@ Prior milestone decisions preserved for context:
 - [Phase 03-02]: Pass HA httpx session into both TokenFetcher and Client at construction (not stored globally)
 - [Phase 03-02]: franklinwh removed from manifest.json requirements as it is now fully vendored
 
+### v1.2 Implementation Notes
+
+- pySunSpec2 (`sunspec2` PyPI package) is synchronous blocking I/O — must run in executor, never on the HA event loop
+- `use_local_api` and `local_host` stub fields already exist in const.py; `CONF_LOCAL_PORT` and `CONF_LOCAL_SLAVE_ID` need to be added
+- Config flow already imports `CONF_USE_LOCAL_API`, `CONF_LOCAL_HOST` from const.py but does not use them yet
+- The Modbus client layer (SunSpec device connect/scan/read) is net-new code
+- The coordinator needs a hybrid update path: Modbus for reads, cloud for writes and fallback
+- Sensor `value_fn` lambdas may need updating if data model shape changes with Modbus data merged in
+- Options flow for toggling local mode is not yet implemented
+
 ### Pending Todos
 
 None.
@@ -72,5 +82,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 03-02-PLAN.md — wired HA httpx client into coordinator and config_flow; v1.1 milestone complete
+Stopped at: v1.2 roadmap created — ready to begin Phase 4 planning
 Resume file: None
