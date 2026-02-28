@@ -35,7 +35,11 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
   3. `coordinator.py` and `config_flow.py` import from `.franklinwh` and pass `get_async_client(hass)` at construction
   4. `manifest.json` has no `franklinwh` entry in `requirements`
   5. Home Assistant startup logs contain no `load_verify_locations` blocking call warning from this integration
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Vendor franklinwh library and modify client to accept injected httpx.AsyncClient
+- [ ] 03-02-PLAN.md — Wire coordinator.py and config_flow.py to use HA httpx client; remove PyPI dependency
 
 ## Progress
 
@@ -43,4 +47,4 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 |-------|-----------|----------------|--------|-----------|
 | 1. File Relocation | v1.0 | 1/1 | Complete | 2026-02-28 |
 | 2. Verification and Documentation | v1.0 | 1/1 | Complete | 2026-02-28 |
-| 3. Vendor and Wire HTTP Client | v1.1 | 0/? | Not started | - |
+| 3. Vendor and Wire HTTP Client | v1.1 | 0/2 | Not started | - |
