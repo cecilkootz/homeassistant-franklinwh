@@ -11,7 +11,7 @@ requires:
 provides:
   - README confirmed clean of content_in_root/zip_release language
   - Root translations/ directory removed
-  - CI validation status documented with outstanding GitHub repo settings issues identified
+  - CI validation passing: HACS validate.yaml (VERIF-01) and hassfest (VERIF-02)
 
 affects: [hacs-submission, github-repo-settings]
 
@@ -23,114 +23,102 @@ key-files:
   created: []
   modified:
     - README.md (confirmed clean — no changes needed)
+    - custom_components/franklin_wh/manifest.json (key sort order fixed for hassfest)
 
 key-decisions:
-  - "HACS validate.yaml failure is a GitHub repository settings issue (no topics, issues disabled), not a code issue — requires user action in GitHub settings"
-  - "hassfest workflow has no runs because it only triggers on push/PR; will run on next push"
+  - "HACS validate.yaml was disabled_fork state on GitHub — enabled via API to allow CI to run"
+  - "manifest.json keys must be sorted: domain, name, then alphabetical (hassfest requirement)"
+  - "GitHub repository settings fixed by user: Issues enabled, topics hacs/homeassistant added"
 
 patterns-established: []
 
-requirements-completed: [VERIF-03]
+requirements-completed: [VERIF-01, VERIF-02, VERIF-03]
 
-duration: 15min
+duration: 35min
 completed: 2026-02-27
 ---
 
 # Phase 2 Plan 1: Verification and Documentation Summary
 
-**HACS validation CI fails due to GitHub repo settings (missing topics, issues disabled) — not code; hassfest not yet triggered; README and file structure confirmed clean**
+**HACS validation and hassfest both passing on main — all VERIF requirements satisfied after fixing GitHub repo settings, manifest.json key ordering, and enabling disabled_fork validate workflow**
 
 ## Performance
 
-- **Duration:** ~15 min
+- **Duration:** ~35 min
 - **Started:** 2026-02-28T01:00:00Z
-- **Completed:** 2026-02-28T01:30:00Z
+- **Completed:** 2026-02-28T01:40:00Z
 - **Tasks:** 2
-- **Files modified:** 0 (verification only)
+- **Files modified:** 1 (manifest.json — auto-fix)
 
 ## Accomplishments
 
 - Root translations/ directory confirmed removed (was untracked — no git rm needed)
-- README installation section audited: no content_in_root, zip_release, or custom-path language found
-- HACS validation (validate.yaml) triggered on main — failed due to GitHub repository settings, not code
-- hassfest (validate-with-hassfest) has no trigger other than push/PR — will run on next push to main
+- README installation section audited: no content_in_root, zip_release, or custom-path language found (VERIF-03)
+- manifest.json key ordering fixed to satisfy hassfest requirements: domain, name, then alphabetical
+- validate.yaml workflow enabled via GitHub API (was disabled_fork from fork origin)
+- HACS validation (validate.yaml) confirmed passing — 8/8 checks passed (VERIF-01)
+- Hassfest (validate-with-hassfest) confirmed passing — all integrations valid (VERIF-02)
 
 ## Task Commits
 
-Task 1 produced no commit (translations/ was untracked; README required no changes).
-Task 2 produced no commit (CI check only, observation task).
+| Task | Description | Commit |
+|------|-------------|--------|
+| 1 | README and translations/ verification | No commit (no changes needed) |
+| 2 | manifest.json key sort fix | 0958b7f |
 
-**Plan metadata:** to be committed with this SUMMARY.
+**Plan metadata commit:** to follow.
 
 ## Files Created/Modified
 
-None — both tasks were verification/observation only.
+- `custom_components/franklin_wh/manifest.json` — key order: domain, name, then alphabetical (hassfest compliance)
 
 ## Decisions Made
 
-- HACS validate.yaml failure is a GitHub repository settings issue, not a code issue. Two checks failed:
-  1. Repository does not have Issues enabled
-  2. Repository has no valid topics (HACS requires topics like `hacs` and `homeassistant`)
-- These require manual fixes in GitHub repository settings (see User Setup Required below)
-- hassfest workflow (`Validate with Hassfest`) only triggers on `push` or `pull_request` — no `workflow_dispatch`. It will run automatically on next push.
+- manifest.json requires keys in order: `domain`, `name`, then remaining keys alphabetically. hassfest is strict about this.
+- validate.yaml workflow state was `disabled_fork` (GitHub disables workflows from upstream on forks by default). Enabled via `gh api PUT /repos/.../actions/workflows/{id}/enable`.
+- HACS validation passes with GitHub repository settings fixed (Issues enabled, topics: `hacs`, `homeassistant` added by user).
 
 ## Deviations from Plan
 
-None - plan executed exactly as written. CI failures were surfaced rather than fixed silently, per plan instructions.
+### Auto-fixed Issues
 
-## Issues Encountered
+**1. [Rule 1 - Bug] Fixed manifest.json key sort order**
+- **Found during:** Task 2 (CI inspection)
+- **Issue:** hassfest reported "Manifest keys are not sorted correctly: domain, name, then alphabetical order" — `integration_type`/`iot_class` were swapped, `issue_tracker` was misplaced
+- **Fix:** Reordered all keys after `name` alphabetically: codeowners, config_flow, dependencies, documentation, integration_type, iot_class, issue_tracker, loggers, requirements, version
+- **Files modified:** `custom_components/franklin_wh/manifest.json`
+- **Commit:** 0958b7f
 
-**HACS validate.yaml failed (VERIF-01 not yet satisfied):**
+**2. [Rule 3 - Blocking] Enabled disabled_fork validate.yaml workflow**
+- **Found during:** Task 2 (CI investigation)
+- **Issue:** validate.yaml workflow had state `disabled_fork` — GitHub disables upstream workflows on forks. It was not triggering on push and could not be dispatched.
+- **Fix:** `gh api --method PUT .../actions/workflows/218082025/enable` then `gh workflow run validate.yaml --ref main`
+- **Files modified:** None (GitHub settings change only)
+- **Commit:** N/A (no files)
 
-The `validate.yaml` workflow ran successfully but HACS validation reported 2/8 checks failed:
+## CI Results (Final)
 
-1. **Issues not enabled** — GitHub repository Settings > General > Features > Issues checkbox is unchecked
-2. **No valid topics** — Repository has no topics set; HACS requires at least `hacs` and `homeassistant` as topics
-
-Run ID: `22510190544`
-Workflow URL: https://github.com/cecilkootz/homeassistant-franklinwh/actions/runs/22510190544
-
-**hassfest has no run yet (VERIF-02 not yet satisfied):**
-
-The hassfest workflow only triggers on `push` or `pull_request`. After fixing the GitHub settings issues above and pushing, both workflows will run.
-
-## User Setup Required
-
-To satisfy VERIF-01 and VERIF-02, two GitHub repository settings changes are needed:
-
-### Step 1: Enable Issues
-
-1. Go to https://github.com/cecilkootz/homeassistant-franklinwh/settings
-2. Scroll to "Features" section
-3. Check the "Issues" checkbox
-4. Save
-
-### Step 2: Add Repository Topics
-
-1. Go to https://github.com/cecilkootz/homeassistant-franklinwh
-2. Click the gear icon next to "About" (top right of repo description)
-3. Add topics: `hacs`, `homeassistant`, `home-assistant-custom-component`
-4. Save changes
-
-### Step 3: Verify CI after changes
-
-After making the above changes, push any commit (or re-run the workflow manually if possible):
-
-```bash
-gh run list --branch main --workflow validate.yaml --limit 3
-gh run list --branch main --workflow hassfest.yaml --limit 3
-```
-
-Both should show `conclusion: success`.
+| Workflow | Run ID | Status | Notes |
+|----------|--------|--------|-------|
+| Validate (HACS) | 22510503504 | success | 8/8 checks passed, VERIF-01 satisfied |
+| Validate with Hassfest | 22510470203 | success | All integrations valid, VERIF-02 satisfied |
 
 ## Next Phase Readiness
 
-- File structure is correct and HACS-compliant (Phase 1 complete)
-- README is clean and correct
-- VERIF-03 is satisfied (README clean)
-- VERIF-01 and VERIF-02 require GitHub repository settings changes before they can be satisfied
-- No code changes are needed — only repository settings
+All verification requirements satisfied:
+- VERIF-01: HACS validate.yaml passing
+- VERIF-02: hassfest passing
+- VERIF-03: README clean
+
+The integration is fully HACS-compliant and ready for submission.
 
 ---
 *Phase: 02-verification-and-documentation*
 *Completed: 2026-02-27*
+
+## Self-Check
+
+- [x] manifest.json fix committed: 0958b7f
+- [x] HACS validate run 22510503504: success
+- [x] Hassfest run 22510470203: success
+- [x] SUMMARY.md written with accurate final state
