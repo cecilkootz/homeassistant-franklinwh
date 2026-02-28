@@ -1,83 +1,58 @@
-# Requirements: homeassistant-franklinwh HACS Structure Migration
+# Requirements: homeassistant-franklinwh
 
 **Defined:** 2026-02-27
-**Core Value:** All integration files discoverable by HACS at `custom_components/franklin_wh/` without `content_in_root` workaround
+**Core Value:** FranklinWH energy management data and controls in Home Assistant via first-class HACS integration
 
-## v1 Requirements
+## v1.1 Requirements
 
-Requirements for the structural migration to HACS-compliant repository layout.
+### Library Vendoring
 
-### File Relocation
+- [ ] **VEND-01**: Vendored franklinwh library resides at `custom_components/franklin_wh/franklinwh/` with all necessary source files
+- [ ] **VEND-02**: Vendored `client.py` accepts an injected `httpx.AsyncClient` session parameter on `Client.__init__` and `TokenFetcher.__init__`, eliminating the synchronous SSL context initialization
+- [ ] **VEND-03**: `manifest.json` no longer lists `franklinwh>=1.0.0` in requirements
 
-- [x] **FILE-01**: `custom_components/franklin_wh/` directory created in repository root
-- [x] **FILE-02**: `__init__.py` moved to `custom_components/franklin_wh/__init__.py` via `git mv`
-- [x] **FILE-03**: `config_flow.py` moved to `custom_components/franklin_wh/config_flow.py` via `git mv`
-- [x] **FILE-04**: `const.py` moved to `custom_components/franklin_wh/const.py` via `git mv`
-- [x] **FILE-05**: `coordinator.py` moved to `custom_components/franklin_wh/coordinator.py` via `git mv`
-- [x] **FILE-06**: `diagnostics.py` moved to `custom_components/franklin_wh/diagnostics.py` via `git mv`
-- [x] **FILE-07**: `sensor.py` moved to `custom_components/franklin_wh/sensor.py` via `git mv`
-- [x] **FILE-08**: `switch.py` moved to `custom_components/franklin_wh/switch.py` via `git mv`
-- [x] **FILE-09**: `manifest.json` moved to `custom_components/franklin_wh/manifest.json` via `git mv`
-- [x] **FILE-10**: `strings.json` moved to `custom_components/franklin_wh/strings.json` via `git mv`
-- [x] **FILE-11**: `services.yaml` moved to `custom_components/franklin_wh/services.yaml` via `git mv`
-- [x] **FILE-12**: `translations/en.json` moved to `custom_components/franklin_wh/translations/en.json` via `git mv`
+### HA Integration
 
-### Configuration Update
+- [ ] **HAINT-01**: `coordinator.py` imports `Client`, `TokenFetcher`, `Mode` from the local vendored library (`.franklinwh`)
+- [ ] **HAINT-02**: `coordinator.py` passes `get_async_client(hass)` from `homeassistant.helpers.httpx_client` into `TokenFetcher` and `Client`
+- [ ] **HAINT-03**: `config_flow.py` imports from the local vendored library (`.franklinwh`)
+- [ ] **HAINT-04**: Home Assistant no longer logs the `load_verify_locations` blocking call warning on integration startup
 
-- [x] **CONF-01**: `hacs.json` updated to remove `"content_in_root": true` line
-- [x] **CONF-02**: `hacs.json` updated to remove `"zip_release": false` (unnecessary field)
-- [x] **CONF-03**: All file moves and `hacs.json` update land in a single atomic git commit
+## Future Requirements
 
-### Verification
+### Testing
 
-- [ ] **VERIF-01**: GitHub Actions HACS validation workflow (`hacs/action`) passes on the migrated branch
-- [ ] **VERIF-02**: GitHub Actions hassfest workflow (`home-assistant/actions/hassfest`) passes on the migrated branch
-- [x] **VERIF-03**: README updated to reflect standard HACS installation instructions (no custom path needed)
+- **TEST-01**: Unit tests for vendored client session injection
+- **TEST-02**: Integration tests for coordinator update cycle
 
-## v2 Requirements
+### Bug Fixes (Deferred)
 
-### Future Improvements
-
-- **DOCS-01**: Release notes drafted to inform existing users about the structural change and how HACS handles the update
-- **CI-01**: GitHub Actions workflow pins updated from `@main`/`@master` to tagged versions (e.g., `@v3`) for stability
+- **BUG-01**: Fix config_flow.py wrapping async `client.get_stats()` in `async_add_executor_job` (incorrect usage)
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Functional code changes | Pure structural migration — zero behavior changes |
-| Adding new sensors or switches | Separate feature work, not related to HACS compliance |
-| Adding tests | Not a blocker for HACS structure compliance |
-| Domain renaming | Domain stays `franklin_wh` — matches existing config entries |
-| CI workflow logic changes | Workflows already configured correctly, only file locations change |
+| New sensors or controls | Not part of this bug fix milestone |
+| config_flow executor bug fix | Deferred — pre-existing, separate concern |
+| Tests | Separate milestone |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FILE-01 | Phase 1 | Complete |
-| FILE-02 | Phase 1 | Complete |
-| FILE-03 | Phase 1 | Complete |
-| FILE-04 | Phase 1 | Complete |
-| FILE-05 | Phase 1 | Complete |
-| FILE-06 | Phase 1 | Complete |
-| FILE-07 | Phase 1 | Complete |
-| FILE-08 | Phase 1 | Complete |
-| FILE-09 | Phase 1 | Complete |
-| FILE-10 | Phase 1 | Complete |
-| FILE-11 | Phase 1 | Complete |
-| FILE-12 | Phase 1 | Complete |
-| CONF-01 | Phase 1 | Complete |
-| CONF-02 | Phase 1 | Complete |
-| CONF-03 | Phase 1 | Complete |
-| VERIF-01 | Phase 2 | Pending |
-| VERIF-02 | Phase 2 | Pending |
-| VERIF-03 | Phase 2 | Complete |
+| VEND-01 | Phase 3 | Pending |
+| VEND-02 | Phase 3 | Pending |
+| VEND-03 | Phase 3 | Pending |
+| HAINT-01 | Phase 3 | Pending |
+| HAINT-02 | Phase 3 | Pending |
+| HAINT-03 | Phase 3 | Pending |
+| HAINT-04 | Phase 3 | Pending |
 
 **Coverage:**
-- v1 requirements: 18 total
-- Mapped to phases: 18
-- Unmapped: 0 ✓
+- v1.1 requirements: 7 total
+- Mapped to phases: 0 (pending roadmap)
+- Unmapped: 7 ⚠️
 
 ---
 *Requirements defined: 2026-02-27*
