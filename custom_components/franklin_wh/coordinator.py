@@ -5,10 +5,11 @@ from __future__ import annotations
 from datetime import timedelta
 import logging
 
-from franklinwh import Client, TokenFetcher, Mode
-from franklinwh.client import Stats
+from .franklinwh import Client, TokenFetcher, Mode
+from .franklinwh.client import Stats
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -67,7 +68,9 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
             # Only mark unavailable after 3 consecutive failures (3 minutes)
             always_update=False,
         )
-        
+
+        self._http_session = get_async_client(hass)
+
         # Track consecutive failures
         self._consecutive_failures = 0
         self._max_failures = 3
@@ -75,17 +78,16 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
     async def _async_update_data(self) -> FranklinWHData:
         """Fetch data from FranklinWH API."""
         try:
-            # Initialize client on first run (in executor to avoid blocking)
+            # Initialize client on first run (non-blocking with injected HA httpx session)
             if self.client is None and not self._client_lock:
                 self._client_lock = True
                 try:
-
-                    def create_client():
-                        token_fetcher = TokenFetcher(self.username, self.password)
-                        return Client(token_fetcher, self.gateway_id)
-
-                    self.client = await self.hass.async_add_executor_job(create_client)
-                    self.token_fetcher = self.client.fetcher
+                    self.token_fetcher = TokenFetcher(
+                        self.username, self.password, session=self._http_session
+                    )
+                    self.client = Client(
+                        self.token_fetcher, self.gateway_id, session=self._http_session
+                    )
                 except Exception as err:
                     self._client_lock = False
                     raise UpdateFailed(f"Failed to initialize client: {err}") from err
