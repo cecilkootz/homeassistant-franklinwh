@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Fix Blocking HTTP Client
-status: defining_requirements
+status: ready_to_plan
 last_updated: "2026-02-27T00:00:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 1
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -18,14 +18,31 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27 after v1.1 milestone start)
 
 **Core value:** FranklinWH energy management data and controls in Home Assistant via first-class HACS integration
-**Current focus:** Defining requirements for v1.1
+**Current focus:** Phase 3 — Vendor and Wire HTTP Client
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 3 of 3 (Vendor and Wire HTTP Client)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-02-27 — Milestone v1.1 started
+Status: Ready to plan
+Last activity: 2026-02-27 — Roadmap created for v1.1
+
+Progress: [░░░░░░░░░░] 0%
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 0
+- Average duration: —
+- Total execution time: —
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
@@ -50,5 +67,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Milestone v1.1 initialized — requirements defined, roadmap pending
+Stopped at: Roadmap created — Phase 3 ready to plan
 Resume file: None
