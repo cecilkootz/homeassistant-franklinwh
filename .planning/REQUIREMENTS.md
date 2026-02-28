@@ -32,7 +32,7 @@ Requirements for the structural migration to HACS-compliant repository layout.
 
 - [ ] **VERIF-01**: GitHub Actions HACS validation workflow (`hacs/action`) passes on the migrated branch
 - [ ] **VERIF-02**: GitHub Actions hassfest workflow (`home-assistant/actions/hassfest`) passes on the migrated branch
-- [ ] **VERIF-03**: README updated to reflect standard HACS installation instructions (no custom path needed)
+- [x] **VERIF-03**: README updated to reflect standard HACS installation instructions (no custom path needed)
 
 ## v2 Requirements
 
@@ -72,7 +72,7 @@ Requirements for the structural migration to HACS-compliant repository layout.
 | CONF-03 | Phase 1 | Complete |
 | VERIF-01 | Phase 2 | Pending |
 | VERIF-02 | Phase 2 | Pending |
-| VERIF-03 | Phase 2 | Pending |
+| VERIF-03 | Phase 2 | Complete |
 
 **Coverage:**
 - v1 requirements: 18 total
