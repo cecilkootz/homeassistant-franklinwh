@@ -1,12 +1,12 @@
-# homeassistant-franklinwh HACS Repository Structure Migration
+# homeassistant-franklinwh
 
 ## What This Is
 
-A Home Assistant custom integration for FranklinWH energy management systems, currently installable via HACS using the non-standard `content_in_root: true` workaround. This project migrates the repository to the standard HACS structure where integration files live under `custom_components/franklin_wh/`, eliminating the workaround and making the integration a first-class HACS citizen.
+A Home Assistant custom integration for FranklinWH energy management systems, installable via HACS using the standard `custom_components/franklin_wh/` directory structure. The integration polls the FranklinWH cloud API and exposes sensors (battery SoC, energy flow, grid status) and switches (operation mode, battery reserve) to Home Assistant.
 
 ## Core Value
 
-All integration files must be discoverable by HACS at `custom_components/franklin_wh/` so that the integration installs correctly without relying on the deprecated `content_in_root` workaround.
+FranklinWH energy management data and controls available in Home Assistant via a first-class HACS integration — no workarounds or custom install paths required.
 
 ## Requirements
 
@@ -18,45 +18,52 @@ All integration files must be discoverable by HACS at `custom_components/frankli
 - ✓ Diagnostics support — existing
 - ✓ Translations (en.json) — existing
 - ✓ manifest.json with all required HACS fields — existing
+- ✓ Integration files relocated to `custom_components/franklin_wh/` — v1.0
+- ✓ `hacs.json` updated to remove `content_in_root` workaround — v1.0
+- ✓ `translations/` directory moved inside `custom_components/franklin_wh/` — v1.0
+- ✓ `services.yaml` and `strings.json` moved inside `custom_components/franklin_wh/` — v1.0
+- ✓ Repository root contains only: `README.md`, `hacs.json`, `LICENSE`, `.github/` — v1.0
+- ✓ HACS validation passing (8/8 checks) — v1.0
+- ✓ Hassfest validation passing — v1.0
 
 ### Active
 
-- [ ] Integration files relocated to `custom_components/franklin_wh/`
-- [ ] `hacs.json` updated to remove `content_in_root: true` workaround
-- [ ] All internal imports updated to reflect new package location
-- [ ] `translations/` directory moved inside `custom_components/franklin_wh/`
-- [ ] `services.yaml` and `strings.json` moved inside `custom_components/franklin_wh/`
-- [ ] Repository root contains only: `README.md`, `hacs.json`, `LICENSE`, `.github/`
+(None — all v1.0 requirements validated. See /gsd:new-milestone for v1.1 requirements.)
 
 ### Out of Scope
 
-- Adding new integration features — this is a structural migration only
+- Adding new integration features — separate from structural work
 - Changing any functional behavior of the integration
 - Adding tests — separate concern, not blocking HACS compliance
+- Mobile app / video chat — not applicable
 
 ## Context
 
-The integration currently stores all Python files at the repository root and uses `"content_in_root": true` in `hacs.json` as a workaround. HACS requires integrations to live under `custom_components/{domain}/`. The migration involves:
+**Shipped v1.0** — 2026-02-28
+- 1,232 LOC Python in `custom_components/franklin_wh/`
+- Tech stack: Python, Home Assistant integration framework, HACS
+- 11 integration files relocated via `git mv` (rename history preserved)
+- CI: HACS validate.yaml + hassfest both passing on main
 
-1. Creating `custom_components/franklin_wh/` directory
-2. Moving all `.py`, `.json`, `.yaml` integration files into it
-3. Moving `translations/` into it
-4. Removing `content_in_root` from `hacs.json`
-
-No functional code changes are needed — only file relocation and import path updates.
+**Known tech debt from v1.0:**
+- VERIFICATION.md artifacts not created for either phase (phases completed without running verify-work)
+- REQUIREMENTS.md VERIF-01/VERIF-02 checkboxes were not updated in real-time (resolved at milestone audit)
 
 ## Constraints
 
-- **Compatibility**: Must continue to work as a Home Assistant custom integration after migration
-- **HACS**: Must pass HACS validation (`hacs.json` without `content_in_root`, proper directory structure)
-- **No feature changes**: Zero functional changes — pure structural migration
+- **Compatibility**: Must continue to work as a Home Assistant custom integration
+- **HACS**: Must pass HACS validation (directory structure at `custom_components/franklin_wh/`)
+- **No feature changes**: Structural migration only — zero functional changes in v1.0
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Move files rather than copy | Keeps git history clean, avoids duplication | — Pending |
-| Update hacs.json in same commit as file moves | Atomic change prevents broken intermediate state | — Pending |
+| Move files via `git mv` rather than copy | Keeps git history clean, GitHub shows renames | ✓ Good — rename history visible in `git log --follow` |
+| Update hacs.json in same commit as file moves | Atomic change prevents broken intermediate state | ✓ Good — single commit 5f5e8cc |
+| Use Python to edit hacs.json | Avoids manual JSON formatting errors | ✓ Good |
+| Fix manifest.json key ordering in Phase 2 | hassfest requires: domain, name, then alphabetical | ✓ Good — committed 0958b7f |
+| Enable disabled_fork validate.yaml via API | GitHub disables upstream workflows on forks by default | ✓ Good — workflow now triggers on push |
 
 ---
-*Last updated: 2026-02-27 after initialization*
+*Last updated: 2026-02-28 after v1.0 milestone*

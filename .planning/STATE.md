@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-28T01:37:16.236Z"
+last_updated: "2026-02-28T01:52:17.636Z"
 progress:
   total_phases: 2
   completed_phases: 2
@@ -15,10 +15,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-27)
+See: .planning/PROJECT.md (updated 2026-02-28 after v1.0 milestone)
 
-**Core value:** All integration files discoverable by HACS at `custom_components/franklin_wh/` without `content_in_root` workaround
-**Current focus:** All phases complete — HACS-compliant structure verified, all CI passing
+**Core value:** FranklinWH energy management data and controls in Home Assistant via first-class HACS integration
+**Current focus:** v1.0 shipped — planning next milestone with /gsd:new-milestone
 
 ## Current Position
 
