@@ -28,13 +28,15 @@ FranklinWH energy management data and controls available in Home Assistant via a
 
 ### Active
 
-(None — all v1.0 requirements validated. See /gsd:new-milestone for v1.1 requirements.)
+- [ ] Vendor franklinwh library into custom_components/franklin_wh/franklinwh/
+- [ ] Eliminate load_verify_locations blocking call by injecting HA httpx client into vendored library
+- [ ] Remove franklinwh PyPI requirement from manifest.json
 
 ### Out of Scope
 
 - Adding new integration features — separate from structural work
-- Changing any functional behavior of the integration
-- Adding tests — separate concern, not blocking HACS compliance
+- Adding tests — separate concern
+- Fixing config_flow.py executor/coroutine bug — deferred
 - Mobile app / video chat — not applicable
 
 ## Context
@@ -49,11 +51,20 @@ FranklinWH energy management data and controls available in Home Assistant via a
 - VERIFICATION.md artifacts not created for either phase (phases completed without running verify-work)
 - REQUIREMENTS.md VERIF-01/VERIF-02 checkboxes were not updated in real-time (resolved at milestone audit)
 
+## Current Milestone: v1.1 Fix Blocking HTTP Client
+
+**Goal:** Eliminate the load_verify_locations event loop warning by vendoring the franklinwh library and using HA's managed httpx client.
+
+**Target features:**
+- Vendor franklinwh/ library files into custom_components/franklin_wh/franklinwh/
+- Inject HA's get_async_client(hass) into the vendored Client and TokenFetcher
+- Remove franklinwh PyPI requirement from manifest.json
+
 ## Constraints
 
 - **Compatibility**: Must continue to work as a Home Assistant custom integration
 - **HACS**: Must pass HACS validation (directory structure at `custom_components/franklin_wh/`)
-- **No feature changes**: Structural migration only — zero functional changes in v1.0
+- **Functional parity**: Vendored library must be functionally identical to upstream except for session injection
 
 ## Key Decisions
 
@@ -66,4 +77,4 @@ FranklinWH energy management data and controls available in Home Assistant via a
 | Enable disabled_fork validate.yaml via API | GitHub disables upstream workflows on forks by default | ✓ Good — workflow now triggers on push |
 
 ---
-*Last updated: 2026-02-28 after v1.0 milestone*
+*Last updated: 2026-02-27 after v1.1 milestone start*
