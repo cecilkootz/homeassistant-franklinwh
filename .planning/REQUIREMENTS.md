@@ -7,8 +7,8 @@
 
 ### Library Vendoring
 
-- [ ] **VEND-01**: Vendored franklinwh library resides at `custom_components/franklin_wh/franklinwh/` with all necessary source files
-- [ ] **VEND-02**: Vendored `client.py` accepts an injected `httpx.AsyncClient` session parameter on `Client.__init__` and `TokenFetcher.__init__`, eliminating the synchronous SSL context initialization
+- [x] **VEND-01**: Vendored franklinwh library resides at `custom_components/franklin_wh/franklinwh/` with all necessary source files
+- [x] **VEND-02**: Vendored `client.py` accepts an injected `httpx.AsyncClient` session parameter on `Client.__init__` and `TokenFetcher.__init__`, eliminating the synchronous SSL context initialization
 - [ ] **VEND-03**: `manifest.json` no longer lists `franklinwh>=1.0.0` in requirements
 
 ### HA Integration
@@ -41,8 +41,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VEND-01 | Phase 3 | Pending |
-| VEND-02 | Phase 3 | Pending |
+| VEND-01 | Phase 3 | Complete |
+| VEND-02 | Phase 3 | Complete |
 | VEND-03 | Phase 3 | Pending |
 | HAINT-01 | Phase 3 | Pending |
 | HAINT-02 | Phase 3 | Pending |
