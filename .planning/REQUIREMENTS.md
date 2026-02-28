@@ -9,14 +9,14 @@
 
 - [x] **VEND-01**: Vendored franklinwh library resides at `custom_components/franklin_wh/franklinwh/` with all necessary source files
 - [x] **VEND-02**: Vendored `client.py` accepts an injected `httpx.AsyncClient` session parameter on `Client.__init__` and `TokenFetcher.__init__`, eliminating the synchronous SSL context initialization
-- [ ] **VEND-03**: `manifest.json` no longer lists `franklinwh>=1.0.0` in requirements
+- [x] **VEND-03**: `manifest.json` no longer lists `franklinwh>=1.0.0` in requirements
 
 ### HA Integration
 
-- [ ] **HAINT-01**: `coordinator.py` imports `Client`, `TokenFetcher`, `Mode` from the local vendored library (`.franklinwh`)
-- [ ] **HAINT-02**: `coordinator.py` passes `get_async_client(hass)` from `homeassistant.helpers.httpx_client` into `TokenFetcher` and `Client`
-- [ ] **HAINT-03**: `config_flow.py` imports from the local vendored library (`.franklinwh`)
-- [ ] **HAINT-04**: Home Assistant no longer logs the `load_verify_locations` blocking call warning on integration startup
+- [x] **HAINT-01**: `coordinator.py` imports `Client`, `TokenFetcher`, `Mode` from the local vendored library (`.franklinwh`)
+- [x] **HAINT-02**: `coordinator.py` passes `get_async_client(hass)` from `homeassistant.helpers.httpx_client` into `TokenFetcher` and `Client`
+- [x] **HAINT-03**: `config_flow.py` imports from the local vendored library (`.franklinwh`)
+- [x] **HAINT-04**: Home Assistant no longer logs the `load_verify_locations` blocking call warning on integration startup
 
 ## Future Requirements
 
@@ -43,11 +43,11 @@
 |-------------|-------|--------|
 | VEND-01 | Phase 3 | Complete |
 | VEND-02 | Phase 3 | Complete |
-| VEND-03 | Phase 3 | Pending |
-| HAINT-01 | Phase 3 | Pending |
-| HAINT-02 | Phase 3 | Pending |
-| HAINT-03 | Phase 3 | Pending |
-| HAINT-04 | Phase 3 | Pending |
+| VEND-03 | Phase 3 | Complete |
+| HAINT-01 | Phase 3 | Complete |
+| HAINT-02 | Phase 3 | Complete |
+| HAINT-03 | Phase 3 | Complete |
+| HAINT-04 | Phase 3 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 7 total

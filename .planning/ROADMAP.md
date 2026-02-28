@@ -21,7 +21,7 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 
 **Milestone Goal:** Eliminate the `load_verify_locations` event loop warning by vendoring the franklinwh library and injecting HA's managed httpx client.
 
-- [ ] **Phase 3: Vendor and Wire HTTP Client** - Vendor franklinwh into the integration, inject HA's httpx client, remove PyPI dependency
+- [x] **Phase 3: Vendor and Wire HTTP Client** - Vendor franklinwh into the integration, inject HA's httpx client, remove PyPI dependency (completed 2026-02-28)
 
 ## Phase Details
 
@@ -47,4 +47,4 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 1. File Relocation | v1.0 | 1/1 | Complete | 2026-02-28 |
 | 2. Verification and Documentation | v1.0 | 1/1 | Complete | 2026-02-28 |
-| 3. Vendor and Wire HTTP Client | 1/2 | In Progress|  | - |
+| 3. Vendor and Wire HTTP Client | 2/2 | Complete   | 2026-02-28 | - |

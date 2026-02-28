@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Fix Blocking HTTP Client
-status: in_progress
-last_updated: "2026-02-27T00:10:00.000Z"
+status: complete
+last_updated: "2026-02-28T02:24:23.336Z"
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -18,29 +18,29 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27 after v1.1 milestone start)
 
 **Core value:** FranklinWH energy management data and controls in Home Assistant via first-class HACS integration
-**Current focus:** Phase 3 — Vendor and Wire HTTP Client
+**Current focus:** Phase 3 — Vendor and Wire HTTP Client (COMPLETE)
 
 ## Current Position
 
 Phase: 3 of 3 (Vendor and Wire HTTP Client)
-Plan: 2 of 2
-Status: In progress — plan 03-01 complete, 03-02 next
-Last activity: 2026-02-27 — Completed plan 03-01
+Plan: 2 of 2 (COMPLETE)
+Status: Complete — all plans executed, v1.1 milestone done
+Last activity: 2026-02-27 — Completed plan 03-02
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 10 min
-- Total execution time: 10 min
+- Total plans completed: 2
+- Average duration: 9 min
+- Total execution time: 18 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 03-vendor-and-wire-http-client | 1/2 | 10 min | 10 min |
+| 03-vendor-and-wire-http-client | 2/2 | 18 min | 9 min |
 
 *Updated after each plan completion*
 
@@ -58,6 +58,8 @@ Prior milestone decisions preserved for context:
 - [v1.1 03-01]: Vendor franklinwh PyPI library verbatim into custom_components to allow targeted modifications without forking
 - [v1.1 03-01]: TokenFetcher injected session called directly (not as context manager) since HA manages the client lifecycle
 - [v1.1 03-01]: Client falls back to get_client() when no session injected, preserving upstream behavior
+- [Phase 03-02]: Pass HA httpx session into both TokenFetcher and Client at construction (not stored globally)
+- [Phase 03-02]: franklinwh removed from manifest.json requirements as it is now fully vendored
 
 ### Pending Todos
 
@@ -70,5 +72,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 03-01-PLAN.md — vendored franklinwh package with session injection
+Stopped at: Completed 03-02-PLAN.md — wired HA httpx client into coordinator and config_flow; v1.1 milestone complete
 Resume file: None
