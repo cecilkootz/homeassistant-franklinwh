@@ -9,24 +9,24 @@ Requirements for the structural migration to HACS-compliant repository layout.
 
 ### File Relocation
 
-- [ ] **FILE-01**: `custom_components/franklin_wh/` directory created in repository root
-- [ ] **FILE-02**: `__init__.py` moved to `custom_components/franklin_wh/__init__.py` via `git mv`
-- [ ] **FILE-03**: `config_flow.py` moved to `custom_components/franklin_wh/config_flow.py` via `git mv`
-- [ ] **FILE-04**: `const.py` moved to `custom_components/franklin_wh/const.py` via `git mv`
-- [ ] **FILE-05**: `coordinator.py` moved to `custom_components/franklin_wh/coordinator.py` via `git mv`
-- [ ] **FILE-06**: `diagnostics.py` moved to `custom_components/franklin_wh/diagnostics.py` via `git mv`
-- [ ] **FILE-07**: `sensor.py` moved to `custom_components/franklin_wh/sensor.py` via `git mv`
-- [ ] **FILE-08**: `switch.py` moved to `custom_components/franklin_wh/switch.py` via `git mv`
-- [ ] **FILE-09**: `manifest.json` moved to `custom_components/franklin_wh/manifest.json` via `git mv`
-- [ ] **FILE-10**: `strings.json` moved to `custom_components/franklin_wh/strings.json` via `git mv`
-- [ ] **FILE-11**: `services.yaml` moved to `custom_components/franklin_wh/services.yaml` via `git mv`
-- [ ] **FILE-12**: `translations/en.json` moved to `custom_components/franklin_wh/translations/en.json` via `git mv`
+- [x] **FILE-01**: `custom_components/franklin_wh/` directory created in repository root
+- [x] **FILE-02**: `__init__.py` moved to `custom_components/franklin_wh/__init__.py` via `git mv`
+- [x] **FILE-03**: `config_flow.py` moved to `custom_components/franklin_wh/config_flow.py` via `git mv`
+- [x] **FILE-04**: `const.py` moved to `custom_components/franklin_wh/const.py` via `git mv`
+- [x] **FILE-05**: `coordinator.py` moved to `custom_components/franklin_wh/coordinator.py` via `git mv`
+- [x] **FILE-06**: `diagnostics.py` moved to `custom_components/franklin_wh/diagnostics.py` via `git mv`
+- [x] **FILE-07**: `sensor.py` moved to `custom_components/franklin_wh/sensor.py` via `git mv`
+- [x] **FILE-08**: `switch.py` moved to `custom_components/franklin_wh/switch.py` via `git mv`
+- [x] **FILE-09**: `manifest.json` moved to `custom_components/franklin_wh/manifest.json` via `git mv`
+- [x] **FILE-10**: `strings.json` moved to `custom_components/franklin_wh/strings.json` via `git mv`
+- [x] **FILE-11**: `services.yaml` moved to `custom_components/franklin_wh/services.yaml` via `git mv`
+- [x] **FILE-12**: `translations/en.json` moved to `custom_components/franklin_wh/translations/en.json` via `git mv`
 
 ### Configuration Update
 
-- [ ] **CONF-01**: `hacs.json` updated to remove `"content_in_root": true` line
-- [ ] **CONF-02**: `hacs.json` updated to remove `"zip_release": false` (unnecessary field)
-- [ ] **CONF-03**: All file moves and `hacs.json` update land in a single atomic git commit
+- [x] **CONF-01**: `hacs.json` updated to remove `"content_in_root": true` line
+- [x] **CONF-02**: `hacs.json` updated to remove `"zip_release": false` (unnecessary field)
+- [x] **CONF-03**: All file moves and `hacs.json` update land in a single atomic git commit
 
 ### Verification
 
@@ -55,21 +55,21 @@ Requirements for the structural migration to HACS-compliant repository layout.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FILE-01 | Phase 1 | Pending |
-| FILE-02 | Phase 1 | Pending |
-| FILE-03 | Phase 1 | Pending |
-| FILE-04 | Phase 1 | Pending |
-| FILE-05 | Phase 1 | Pending |
-| FILE-06 | Phase 1 | Pending |
-| FILE-07 | Phase 1 | Pending |
-| FILE-08 | Phase 1 | Pending |
-| FILE-09 | Phase 1 | Pending |
-| FILE-10 | Phase 1 | Pending |
-| FILE-11 | Phase 1 | Pending |
-| FILE-12 | Phase 1 | Pending |
-| CONF-01 | Phase 1 | Pending |
-| CONF-02 | Phase 1 | Pending |
-| CONF-03 | Phase 1 | Pending |
+| FILE-01 | Phase 1 | Complete |
+| FILE-02 | Phase 1 | Complete |
+| FILE-03 | Phase 1 | Complete |
+| FILE-04 | Phase 1 | Complete |
+| FILE-05 | Phase 1 | Complete |
+| FILE-06 | Phase 1 | Complete |
+| FILE-07 | Phase 1 | Complete |
+| FILE-08 | Phase 1 | Complete |
+| FILE-09 | Phase 1 | Complete |
+| FILE-10 | Phase 1 | Complete |
+| FILE-11 | Phase 1 | Complete |
+| FILE-12 | Phase 1 | Complete |
+| CONF-01 | Phase 1 | Complete |
+| CONF-02 | Phase 1 | Complete |
+| CONF-03 | Phase 1 | Complete |
 | VERIF-01 | Phase 2 | Pending |
 | VERIF-02 | Phase 2 | Pending |
 | VERIF-03 | Phase 2 | Pending |
