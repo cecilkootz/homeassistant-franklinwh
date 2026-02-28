@@ -41,6 +41,45 @@
 
 ---
 
+## Milestone: v1.1 — Fix Blocking HTTP Client
+
+**Shipped:** 2026-02-28
+**Phases:** 1 | **Plans:** 2 | **Sessions:** 1
+
+### What Was Built
+- franklinwh PyPI library vendored verbatim into `custom_components/franklin_wh/franklinwh/` with targeted session-injection modifications to `client.py`
+- `TokenFetcher` and `Client` both accept optional `httpx.AsyncClient` — when injected, no `httpx.AsyncClient()` construction occurs (eliminates `load_verify_locations` blocking call)
+- `coordinator.py` wired to `get_async_client(hass)` — `async_add_executor_job` wrapper removed
+- `config_flow.py` wired to same HA-managed client
+- `franklinwh>=1.0.0` removed from `manifest.json` requirements
+
+### What Worked
+- Single-phase milestone was fast to plan and execute — the problem was well-scoped
+- Vendoring approach (copy verbatim + targeted patch) was surgical: 4 library files unchanged, only `client.py` modified
+- Optional injection pattern (`session if session is not None else self.get_client()`) preserves upstream behavior for non-HA usage and tests
+- Integration checker confirmed all 7 requirements wired with E2E flow traces
+
+### What Was Inefficient
+- VERIFICATION.md again not produced — `verifier_enabled: false` in config means audit relied on 2/3 sources (SUMMARY frontmatter + integration checker) rather than 3/3
+- `plan-milestone-gaps` was invoked unnecessarily by user — audit status was `tech_debt`, not `gaps_found`; the distinction between statuses could be made clearer in the output
+
+### Patterns Established
+- **Session injection pattern**: `TokenFetcher(session=session)` and `Client(session=session)` at construction, obtained once via `get_async_client(hass)` in `coordinator.__init__`
+- **Vendoring rule**: never close an HA-managed httpx client; use it directly (not as context manager)
+- **Milestone scope**: fix milestones can be single-phase (3 tasks, 1 day execution)
+
+### Key Lessons
+1. **Enable verifier in config** — `verifier_enabled: false` saves time but weakens audit confidence; the 3rd source (VERIFICATION.md) provides independent code verification that SUMMARY frontmatter cannot
+2. **Audit status routing**: `tech_debt` → `complete-milestone`; `gaps_found` → `plan-milestone-gaps`. Users may not intuitively distinguish these.
+3. **httpx client lifecycle in HA**: `get_async_client(hass)` returns a singleton managed by HA; never pass it as async context manager, never close it manually
+
+### Cost Observations
+- Model mix: ~100% sonnet
+- Sessions: 1
+- Notable: Single-day execution — milestones scoped to one fix are very efficient
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -48,8 +87,10 @@
 | Milestone | Sessions | Phases | Key Change |
 |-----------|----------|--------|------------|
 | v1.0 | ~3 | 2 | Initial migration — established HACS-compliant structure |
+| v1.1 | 1 | 1 | Single-fix milestone — vendoring + session injection |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. Run verify-work after every phase to maintain 3-source audit coverage
+1. **Enable verifier** — `verifier_enabled: false` has appeared in both milestones, consistently degrading audit confidence
 2. Check external service prerequisites (GitHub settings, CI workflow states) during research, not during execution
+3. Single-phase fix milestones execute in one session — scope tightly and ship fast

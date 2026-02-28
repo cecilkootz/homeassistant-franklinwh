@@ -25,12 +25,15 @@ FranklinWH energy management data and controls available in Home Assistant via a
 - ✓ Repository root contains only: `README.md`, `hacs.json`, `LICENSE`, `.github/` — v1.0
 - ✓ HACS validation passing (8/8 checks) — v1.0
 - ✓ Hassfest validation passing — v1.0
+- ✓ franklinwh library vendored into `custom_components/franklin_wh/franklinwh/` — v1.1
+- ✓ `Client` and `TokenFetcher` accept injected `httpx.AsyncClient` — v1.1
+- ✓ `coordinator.py` and `config_flow.py` use `get_async_client(hass)` — v1.1
+- ✓ `manifest.json` has no `franklinwh` PyPI dependency — v1.1
+- ✓ No `load_verify_locations` blocking call on HA startup — v1.1
 
 ### Active
 
-- [ ] Vendor franklinwh library into custom_components/franklin_wh/franklinwh/
-- [ ] Eliminate load_verify_locations blocking call by injecting HA httpx client into vendored library
-- [ ] Remove franklinwh PyPI requirement from manifest.json
+(No active requirements — planning next milestone)
 
 ### Out of Scope
 
@@ -41,24 +44,20 @@ FranklinWH energy management data and controls available in Home Assistant via a
 
 ## Context
 
-**Shipped v1.0** — 2026-02-28
-- 1,232 LOC Python in `custom_components/franklin_wh/`
-- Tech stack: Python, Home Assistant integration framework, HACS
-- 11 integration files relocated via `git mv` (rename history preserved)
+**Shipped v1.1** — 2026-02-28
+- 2,125 LOC Python in `custom_components/franklin_wh/` (incl. 894 vendored franklinwh/)
+- Tech stack: Python, Home Assistant integration framework, HACS, httpx (HA-managed)
+- franklinwh library vendored and modified for session injection (non-blocking startup)
 - CI: HACS validate.yaml + hassfest both passing on main
 
-**Known tech debt from v1.0:**
-- VERIFICATION.md artifacts not created for either phase (phases completed without running verify-work)
-- REQUIREMENTS.md VERIF-01/VERIF-02 checkboxes were not updated in real-time (resolved at milestone audit)
+**Shipped v1.0** — 2026-02-28
+- 11 integration files relocated via `git mv` (rename history preserved)
+- HACS validate.yaml + hassfest both passing (8/8 checks)
 
-## Current Milestone: v1.1 Fix Blocking HTTP Client
-
-**Goal:** Eliminate the load_verify_locations event loop warning by vendoring the franklinwh library and using HA's managed httpx client.
-
-**Target features:**
-- Vendor franklinwh/ library files into custom_components/franklin_wh/franklinwh/
-- Inject HA's get_async_client(hass) into the vendored Client and TokenFetcher
-- Remove franklinwh PyPI requirement from manifest.json
+**Known tech debt:**
+- Debug-mode: `event_hooks` appended to shared HA httpx client when `debug=True` (edge case)
+- BUG-01: `config_flow.py` wraps async `client.get_stats()` in `async_add_executor_job` (pre-existing, deferred)
+- No unit or integration tests (TEST-01, TEST-02 deferred)
 
 ## Constraints
 
@@ -75,6 +74,10 @@ FranklinWH energy management data and controls available in Home Assistant via a
 | Use Python to edit hacs.json | Avoids manual JSON formatting errors | ✓ Good |
 | Fix manifest.json key ordering in Phase 2 | hassfest requires: domain, name, then alphabetical | ✓ Good — committed 0958b7f |
 | Enable disabled_fork validate.yaml via API | GitHub disables upstream workflows on forks by default | ✓ Good — workflow now triggers on push |
+| Vendor franklinwh into custom_components rather than fork upstream repo | Minimizes maintenance burden; targeted modification stays local | ✓ Good — no upstream PR needed, changes are HA-specific |
+| TokenFetcher injected session called directly (not as context manager) | HA manages the client lifecycle; closing it would break other integrations | ✓ Good — session lifecycle stays with HA |
+| Client falls back to `get_client()` when no session injected | Preserves upstream test compatibility and non-HA usage | ✓ Good — library still usable outside HA |
+| Pass HA httpx session at construction (not stored globally) | Avoids shared mutable state; each coordinator owns its session reference | ✓ Good — clean dependency injection |
 
 ---
-*Last updated: 2026-02-27 after v1.1 milestone start*
+*Last updated: 2026-02-28 after v1.1 milestone*

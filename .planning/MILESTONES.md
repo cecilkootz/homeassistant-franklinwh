@@ -1,5 +1,22 @@
 # Milestones
 
+## v1.1 Fix Blocking HTTP Client (Shipped: 2026-02-28)
+
+**Phases completed:** 1 phase, 2 plans, 4 tasks
+
+**Key accomplishments:**
+- Vendored franklinwh PyPI library into `custom_components/franklin_wh/franklinwh/` — targeted modification without forking upstream
+- Modified `TokenFetcher` and `Client` to accept injected `httpx.AsyncClient` — no SSL context created at construction time
+- Wired `coordinator.py` to HA's managed httpx client via `get_async_client(hass)` — `async_add_executor_job` wrapper removed
+- Wired `config_flow.py` to same HA-managed client — config validation is now non-blocking
+- Removed `franklinwh>=1.0.0` from `manifest.json` requirements — library fully vendored, no PyPI install
+
+**Git range:** c3c15b8 → a343457
+**LOC:** 1,359 across key files (806 vendored client.py, 242 coordinator.py, 223 config_flow.py)
+**Archive:** .planning/milestones/v1.1-ROADMAP.md
+
+---
+
 ## v1.0 HACS Structure Migration (Shipped: 2026-02-28)
 
 **Phases completed:** 2 phases, 2 plans, 0 tasks
