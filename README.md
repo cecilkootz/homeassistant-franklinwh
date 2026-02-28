@@ -353,7 +353,7 @@ You may choose either license when using or contributing to this project.
 
 ---
 
-## ⚠️ Disclaimer
+# ⚠️ Disclaimer
 
 This integration is not affiliated with, endorsed by, or supported by FranklinWH. Use at your own risk. The developers are not responsible for any damage to your system or equipment.
 
