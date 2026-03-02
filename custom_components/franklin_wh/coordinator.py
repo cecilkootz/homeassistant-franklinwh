@@ -139,13 +139,14 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
 
                     # Map SunSpecData to FranklinWHData with hybrid approach:
                     # - Current values (power flow) from Modbus
-                    # - Totals (kWh) and switch state from cloud
+                    # - Totals (kWh), switch state, and aPower info from cloud
                     return FranklinWHData(
                         stats=Stats(
                             current=self._map_sunspec_to_stats_current(sunspec_data),
                             totals=cloud_stats.stats.totals if cloud_stats else self._get_default_totals(),
                         ),
                         switch_state=cloud_stats.switch_state if cloud_stats else None,
+                        apowers_info=cloud_stats.apowers_info if cloud_stats else None,
                     )
                 except Exception as err:
                     # Log warning and fall back to cloud on any Modbus error
@@ -292,6 +293,15 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
             switch_2_use=0.0,
             v2l_export=0.0,
             v2l_import=0.0,
+            solar_to_home=0.0,
+            grid_to_home=0.0,
+            battery_to_home=0.0,
+            generator_to_home=0.0,
+            grid_to_battery=0.0,
+            solar_to_battery=0.0,
+            solar_to_grid=0.0,
+            battery_to_grid=0.0,
+            ambient_temperature=0.0,
         )
 
     async def _fetch_cloud_stats_fallback(self) -> FranklinWHData | None:
@@ -300,6 +310,7 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
         This method is called when Modbus is enabled but we need cloud data for:
         - Energy totals (kWh values not available via Modbus)
         - Switch state
+        - aPower device info
         """
         try:
             # Initialize client lazily if not already created
@@ -329,7 +340,13 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                 except Exception as err:
                     _LOGGER.debug("Failed to fetch switch state: %s", err)
 
-                return FranklinWHData(stats=stats, switch_state=switch_state)
+                apowers_info = None
+                try:
+                    apowers_info = await self.client.get_apowers_info()
+                except Exception as err:
+                    _LOGGER.debug("Failed to fetch apowers info: %s", err)
+
+                return FranklinWHData(stats=stats, switch_state=switch_state, apowers_info=apowers_info)
             except Exception as err:
                 _LOGGER.warning("Cloud fallback fetch failed: %s", err)
                 return None
