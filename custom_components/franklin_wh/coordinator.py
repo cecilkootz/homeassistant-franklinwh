@@ -9,6 +9,7 @@ from .franklinwh import Client, TokenFetcher, Mode
 from .franklinwh.client import Stats
 from .sunspec_client import SunSpecModbusClient, SunSpecData
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -43,6 +44,7 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
         local_host: str | None = None,
         local_port: int = DEFAULT_LOCAL_PORT,
         local_slave_id: int = DEFAULT_LOCAL_SLAVE_ID,
+        config_entry: ConfigEntry | None = None,
     ) -> None:
         """Initialize the coordinator."""
         self.username = username
@@ -78,6 +80,7 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
             # Keep entities available during temporary failures
             # Only mark unavailable after 3 consecutive failures (3 minutes)
             always_update=False,
+            config_entry=config_entry,
         )
 
         self._http_session = get_async_client(hass)

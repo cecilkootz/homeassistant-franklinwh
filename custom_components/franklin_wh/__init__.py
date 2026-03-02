@@ -56,6 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         local_host=local_host,
         local_port=local_port,
         local_slave_id=local_slave_id,
+        config_entry=entry,
     )
 
     # Fetch initial data
