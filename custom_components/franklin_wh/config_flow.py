@@ -17,13 +17,6 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONF_GATEWAY_ID,
-    CONF_LOCAL_HOST,
-    CONF_LOCAL_PORT,
-    CONF_LOCAL_SLAVE_ID,
-    CONF_USE_LOCAL_API,
-    DEFAULT_LOCAL_PORT,
-    DEFAULT_LOCAL_SCAN_INTERVAL,
-    DEFAULT_LOCAL_SLAVE_ID,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
@@ -39,7 +32,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     username = data[CONF_USERNAME]
     password = data[CONF_PASSWORD]
     gateway_id = data[CONF_GATEWAY_ID]
-    
+
     try:
         http_session = get_async_client(hass)
         token_fetcher = franklinwh_lib.TokenFetcher(username, password, session=http_session)
@@ -58,7 +51,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     except Exception as err:
         _LOGGER.exception("Unexpected exception: %s", err)
         error_str = str(err).lower()
-        
+
         # Check for specific error types
         if "timeout" in error_str or "timed out" in error_str:
             _LOGGER.error("Device timeout - gateway may be offline or unreachable")
@@ -68,13 +61,13 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
                 "2. Gateway ID is correct\n"
                 "3. FranklinWH cloud services are online"
             ) from err
-        
+
         if "auth" in error_str or "token" in error_str or "401" in error_str:
             raise InvalidAuth from err
-        
+
         if "gateway" in error_str or "device" in error_str:
             raise InvalidGateway from err
-        
+
         raise CannotConnect from err
 
 
@@ -88,12 +81,12 @@ class FranklinWHConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle the initial step."""
         errors: dict[str, str] = {}
-        
+
         if user_input is not None:
             # Check if already configured
             await self.async_set_unique_id(user_input[CONF_GATEWAY_ID])
             self._abort_if_unique_id_configured()
-            
+
             try:
                 info = await validate_input(self.hass, user_input)
             except CannotConnect:
@@ -108,22 +101,11 @@ class FranklinWHConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 return self.async_create_entry(title=info["title"], data=user_input)
 
-        # Build the data schema
-        # Note: Local API fields are optional - user can skip local mode during setup
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME): cv.string,
                 vol.Required(CONF_PASSWORD): cv.string,
                 vol.Required(CONF_GATEWAY_ID): cv.string,
-                # Local API options (all optional - skip for cloud-only mode)
-                vol.Optional(CONF_USE_LOCAL_API, default=False): cv.boolean,
-                vol.Optional(CONF_LOCAL_HOST): cv.string,
-                vol.Optional(CONF_LOCAL_PORT, default=DEFAULT_LOCAL_PORT): vol.All(
-                    vol.Coerce(int), vol.Range(min=1, max=65535)
-                ),
-                vol.Optional(CONF_LOCAL_SLAVE_ID, default=DEFAULT_LOCAL_SLAVE_ID): vol.All(
-                    vol.Coerce(int), vol.Range(min=1, max=255)
-                ),
             }
         )
 
@@ -140,16 +122,16 @@ class FranklinWHConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle reauth confirmation."""
         errors: dict[str, str] = {}
-        
+
         if user_input is not None:
             # Get the existing entry
             entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
             if entry is None:
                 return self.async_abort(reason="reauth_failed")
-            
+
             # Combine existing data with new credentials
             data = {**entry.data, **user_input}
-            
+
             try:
                 await validate_input(self.hass, data)
             except CannotConnect:
@@ -201,26 +183,11 @@ class FranklinWHOptionsFlow(config_entries.OptionsFlow):
             "scan_interval",
             DEFAULT_SCAN_INTERVAL,
         )
-        use_local_api = self.config_entry.options.get(CONF_USE_LOCAL_API, False)
-        local_host = self.config_entry.options.get(CONF_LOCAL_HOST)
-        local_port = self.config_entry.options.get(CONF_LOCAL_PORT, DEFAULT_LOCAL_PORT)
-        local_slave_id = self.config_entry.options.get(
-            CONF_LOCAL_SLAVE_ID, DEFAULT_LOCAL_SLAVE_ID
-        )
 
         data_schema = vol.Schema(
             {
                 vol.Optional("scan_interval", default=scan_interval): vol.All(
                     vol.Coerce(int), vol.Range(min=30, max=3600)
-                ),
-                # Local API options
-                vol.Optional(CONF_USE_LOCAL_API, default=use_local_api): cv.boolean,
-                vol.Optional(CONF_LOCAL_HOST, default=local_host or ""): cv.string,
-                vol.Optional(CONF_LOCAL_PORT, default=local_port): vol.All(
-                    vol.Coerce(int), vol.Range(min=1, max=65535)
-                ),
-                vol.Optional(CONF_LOCAL_SLAVE_ID, default=str(local_slave_id)): vol.All(
-                    str, vol.Coerce(int), vol.Range(min=1, max=255)
                 ),
             }
         )
@@ -238,4 +205,3 @@ class InvalidAuth(HomeAssistantError):
 
 class InvalidGateway(HomeAssistantError):
     """Error to indicate the gateway ID is invalid."""
-
