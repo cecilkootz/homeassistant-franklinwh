@@ -17,7 +17,11 @@ import voluptuous as vol
 from .const import (
     CONF_GATEWAY_ID,
     CONF_LOCAL_HOST,
+    CONF_LOCAL_PORT,
+    CONF_LOCAL_SLAVE_ID,
     CONF_USE_LOCAL_API,
+    DEFAULT_LOCAL_PORT,
+    DEFAULT_LOCAL_SLAVE_ID,
     DOMAIN,
     SERVICE_SET_BATTERY_RESERVE,
     SERVICE_SET_OPERATION_MODE,
@@ -34,10 +38,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
     gateway_id = entry.data[CONF_GATEWAY_ID]
-    use_local_api = entry.data.get(CONF_USE_LOCAL_API, False)
-    local_host = entry.data.get(CONF_LOCAL_HOST)
 
-    # Create coordinator
+    # Read Modbus settings from entry.options first (options flow users),
+    # falling back to entry.data (first-setup users; entry.options is empty on first setup)
+    use_local_api = entry.options.get(CONF_USE_LOCAL_API, entry.data.get(CONF_USE_LOCAL_API, False))
+    local_host = entry.options.get(CONF_LOCAL_HOST, entry.data.get(CONF_LOCAL_HOST))
+    local_port = entry.options.get(CONF_LOCAL_PORT, entry.data.get(CONF_LOCAL_PORT, DEFAULT_LOCAL_PORT))
+    local_slave_id = entry.options.get(CONF_LOCAL_SLAVE_ID, entry.data.get(CONF_LOCAL_SLAVE_ID, DEFAULT_LOCAL_SLAVE_ID))
+
+    # Create coordinator with all Modbus parameters
     coordinator = FranklinWHCoordinator(
         hass=hass,
         username=username,
@@ -45,6 +54,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         gateway_id=gateway_id,
         use_local_api=use_local_api,
         local_host=local_host,
+        local_port=local_port,
+        local_slave_id=local_slave_id,
     )
 
     # Fetch initial data
@@ -55,8 +66,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error("Authentication failed: %s", err)
         raise
     except Exception as err:
-        _LOGGER.error("Error setting up FranklinWH: %s", err)
-        raise ConfigEntryNotReady from err
+        # Check if this is a Modbus-related error at startup
+        err_str = str(err).lower()
+        is_modbus_error = (
+            "sunspec" in err_str
+            or "modbus" in err_str
+            or "connection" in err_str
+            or "timeout" in err_str
+        )
+
+        if use_local_api and is_modbus_error:
+            # Modbus failed at startup - log warning and continue with cloud-only
+            _LOGGER.warning(
+                "Modbus failed at startup (%s), continuing with cloud-only mode. "
+                "The integration loaded successfully but local Modbus will be "
+                "disabled until the next reload or restart.",
+                err
+            )
+            # Update options to disable local API for next reload
+            from homeassistant.config_entries import ConfigEntry
+
+            # Store that we fell back to cloud-only due to Modbus failure
+            hass.data.setdefault(DOMAIN, {})
+            hass.data[DOMAIN][f"{entry.entry_id}_modbus_failed"] = True
+        else:
+            _LOGGER.error("Error setting up FranklinWH: %s", err)
+            raise ConfigEntryNotReady from err
 
     # Store coordinator
     hass.data.setdefault(DOMAIN, {})
@@ -64,6 +99,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Reload the entry when options change (e.g., toggling local Modbus mode)
+    entry.add_update_listener(async_reload_entry)
 
     # Register services
     async def handle_set_operation_mode(call: ServiceCall) -> None:

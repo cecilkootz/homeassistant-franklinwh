@@ -2,17 +2,7 @@
 
 ## What This Is
 
-A Home Assistant custom integration for FranklinWH energy management systems, installable via HACS using the standard `custom_components/franklin_wh/` directory structure. The integration supports two data paths: cloud API polling (always required for writes) and optional local SunSpec Modbus TCP polling for faster real-time sensor data. Exposes sensors (battery SoC, energy flow, grid status) and switches (operation mode, battery reserve) to Home Assistant.
-
-## Current Milestone: v1.2 SunSpec/Modbus Local API
-
-**Goal:** Add a local Modbus TCP data path that replaces cloud reads with faster SunSpec polling while keeping cloud for write operations.
-
-**Target features:**
-- SunSpec Modbus TCP client reading Models 502, 701, 713, 714
-- Config flow UI for host, port, slave ID
-- Hybrid coordinator: local reads at 10s interval, cloud writes always
-- Graceful fallback to cloud when Modbus unavailable
+A Home Assistant custom integration for FranklinWH energy management systems, installable via HACS using the standard `custom_components/franklin_wh/` directory structure. The integration supports two data paths: cloud API polling (always required for writes) and optional local SunSpec Modbus TCP polling for faster real-time sensor data. Exposes sensors (battery SoC, battery DC power, solar production, grid AC power, home load, energy totals) and switches (operation mode, battery reserve) to Home Assistant.
 
 ## Core Value
 
@@ -40,28 +30,36 @@ FranklinWH energy management data and controls available in Home Assistant via a
 - ✓ `coordinator.py` and `config_flow.py` use `get_async_client(hass)` — v1.1
 - ✓ `manifest.json` has no `franklinwh` PyPI dependency — v1.1
 - ✓ No `load_verify_locations` blocking call on HA startup — v1.1
+- ✓ User can configure Modbus TCP host, port (default 502), and slave ID (default 1) during setup — v1.2
+- ✓ User can enable/disable local Modbus via options flow without HA restart — v1.2
+- ✓ Integration reads battery SoC, DC power, solar power, grid AC power from SunSpec at 10s interval — v1.2
+- ✓ Write operations (set_operation_mode, set_battery_reserve, switches) always use cloud — v1.2
+- ✓ Sensors without Modbus equivalent (energy totals) use cloud data in hybrid mode — v1.2
+- ✓ Modbus failures degrade gracefully without marking integration unavailable — v1.2
+- ✓ Integration loads successfully when Modbus unreachable at startup — v1.2
 
 ### Active
 
-- [ ] User can configure Modbus TCP host, port (default 502), and slave ID (default 1) during setup — v1.2
-- [ ] User can enable/disable local Modbus via options flow — v1.2
-- [ ] Integration reads battery SoC, DC power, solar power, grid AC power from SunSpec at 10s interval — v1.2
-- [ ] Write operations (set_operation_mode, set_battery_reserve, switches) always use cloud — v1.2
-- [ ] Sensors without Modbus equivalent fall back to cloud data — v1.2
-- [ ] Modbus failures degrade gracefully without marking integration unavailable — v1.2
+(No active requirements — planning next milestone)
 
 ### Out of Scope
 
-- Adding tests — separate concern
-- Fixing config_flow.py executor/coroutine bug — deferred
-- Modbus write support (set_operation_mode via Modbus) — no confirmed register mapping
-- Mobile app / video chat — not applicable
+- Adding unit/integration tests — separate milestone concern (TEST-01, TEST-02 deferred)
+- Fixing config_flow.py executor/coroutine bug (BUG-01) — pre-existing, deferred
+- Modbus write support (set_operation_mode via Modbus) — no confirmed register mapping for FranklinWH
+- Making `scan_interval` user-configurable via options flow — options UI field exists but coordinator ignores it; v1.3 concern
 
 ## Context
 
+**Shipped v1.2** — 2026-03-01
+- 1,589 LOC Python in `custom_components/franklin_wh/` (5 phases, 7 plans, 36 commits)
+- New file: `sunspec_client.py` (167 LOC) — SunSpec Modbus TCP client, executor-safe
+- Hybrid coordinator: Modbus for power flow (10s), cloud for energy totals (60s) and writes
+- All 11 v1.2 requirements satisfied; 2 gap-closure phases (7, 8) added post-audit
+- Hardware validation still needed: Model 502 presence, Model 714 DCW fallback path
+
 **Shipped v1.1** — 2026-02-28
 - 2,125 LOC Python in `custom_components/franklin_wh/` (incl. 894 vendored franklinwh/)
-- Tech stack: Python, Home Assistant integration framework, HACS, httpx (HA-managed)
 - franklinwh library vendored and modified for session injection (non-blocking startup)
 - CI: HACS validate.yaml + hassfest both passing on main
 
@@ -73,6 +71,8 @@ FranklinWH energy management data and controls available in Home Assistant via a
 - Debug-mode: `event_hooks` appended to shared HA httpx client when `debug=True` (edge case)
 - BUG-01: `config_flow.py` wraps async `client.get_stats()` in `async_add_executor_job` (pre-existing, deferred)
 - No unit or integration tests (TEST-01, TEST-02 deferred)
+- `scan_interval` options field in UI is wired but ignored by coordinator — silently discarded after options save
+- Model 502 (solar) on FranklinWH hardware: unconfirmed presence; `RuntimeError` if absent
 
 ## Constraints
 
@@ -94,6 +94,13 @@ FranklinWH energy management data and controls available in Home Assistant via a
 | TokenFetcher injected session called directly (not as context manager) | HA manages the client lifecycle; closing it would break other integrations | ✓ Good — session lifecycle stays with HA |
 | Client falls back to `get_client()` when no session injected | Preserves upstream test compatibility and non-HA usage | ✓ Good — library still usable outside HA |
 | Pass HA httpx session at construction (not stored globally) | Avoids shared mutable state; each coordinator owns its session reference | ✓ Good — clean dependency injection |
+| Use PyPI name `pysunspec2` (not `sunspec2`) in manifest.json | `sunspec2` is the import name; `pysunspec2` is the PyPI distribution name — HA pip installs from PyPI | ✓ Good — install works correctly |
+| All Modbus I/O in `_read_blocking()`, dispatched via `async_add_executor_job` | pySunSpec2 is synchronous blocking — cannot run on HA event loop | ✓ Good — no event loop blocking |
+| Hybrid data strategy: Modbus for Stats.current, cloud for Stats.totals | Modbus has no energy accumulator; cloud kWh data fills the gap cleanly | ✓ Good — both data paths complement each other |
+| `_fetch_cloud_stats_fallback()` returns None on failure (no exception propagation) | Allows hybrid path to continue with last-known totals without failing the update cycle | ✓ Good — resilient to cloud blips |
+| Read Modbus settings with options-then-data fallback in `__init__.py` | `entry.options` is empty on first setup; data fallback ensures Modbus activates correctly on first boot | ✓ Good — Phase 7 fix closed first-setup bug |
+| `add_update_listener(async_reload_entry)` unconditional, after `async_forward_entry_setups` | Options changes must always trigger reload regardless of mode; missed in Phase 5, closed in Phase 8 | ✓ Good — options toggle now works without HA restart |
+| Single negation for `grid_use` in coordinator:233 only; sensor `value_fn` sign-neutral | Two negations cause double inversion (Phase 5 bug); canonical normalization belongs in coordinator | ✓ Good — Phase 8 fix restored correct polarity |
 
 ---
-*Last updated: 2026-02-27 after v1.2 milestone start*
+*Last updated: 2026-03-01 after v1.2 milestone*

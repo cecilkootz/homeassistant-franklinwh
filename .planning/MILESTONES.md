@@ -1,5 +1,24 @@
 # Milestones
 
+## v1.2 SunSpec/Modbus Local API (Shipped: 2026-03-01)
+
+**Phases completed:** 5 phases (4-8), 7 plans
+**Requirements:** 11/11 satisfied (MCONF-01/02, MDATA-01–07, MRES-01–03)
+
+**Key accomplishments:**
+- `SunSpecModbusClient` reads SunSpec Models 502/701/713/714 via pySunSpec2 in executor — battery SoC, DC power, solar, grid AC, home load available locally at 10s interval
+- Config flow and options flow wired for Modbus TCP host/port/slave ID; local mode togglable without re-entering cloud credentials
+- Hybrid coordinator: Modbus provides real-time power flow, cloud provides energy totals (kWh) — two data paths coexist cleanly
+- Modbus failures fall back to cloud automatically (warning logged, entities stay available); unreachable Modbus at startup no longer blocks integration load
+- Options flow changes trigger coordinator reload via `add_update_listener` — no HA restart required to switch modes (Phase 8 gap closure)
+- Grid AC power polarity normalized to single negation in coordinator — positive = importing from grid in both cloud and Modbus paths (Phase 8 gap closure)
+
+**Git range:** f7ecbf2 → HEAD (36 commits)
+**LOC:** 1,589 Python (custom_components/franklin_wh/), +167 LOC sunspec_client.py new file
+**Archive:** .planning/milestones/v1.2-ROADMAP.md
+
+---
+
 ## v1.1 Fix Blocking HTTP Client (Shipped: 2026-02-28)
 
 **Phases completed:** 1 phase, 2 plans, 4 tasks

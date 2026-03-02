@@ -7,11 +7,15 @@ DOMAIN: Final = "franklin_wh"
 CONF_GATEWAY_ID: Final = "gateway_id"
 CONF_USE_LOCAL_API: Final = "use_local_api"
 CONF_LOCAL_HOST: Final = "local_host"
+CONF_LOCAL_PORT: Final = "local_port"
+CONF_LOCAL_SLAVE_ID: Final = "slave_id"
 
 # Default values
 DEFAULT_NAME: Final = "FranklinWH"
 DEFAULT_SCAN_INTERVAL: Final = 60  # seconds
 DEFAULT_LOCAL_SCAN_INTERVAL: Final = 10  # seconds for local API
+DEFAULT_LOCAL_PORT: Final = 502
+DEFAULT_LOCAL_SLAVE_ID: Final = 1
 
 # API endpoints (for local API when available)
 LOCAL_API_PORT: Final = 8080

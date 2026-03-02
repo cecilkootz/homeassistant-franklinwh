@@ -18,8 +18,12 @@ import homeassistant.helpers.config_validation as cv
 from .const import (
     CONF_GATEWAY_ID,
     CONF_LOCAL_HOST,
+    CONF_LOCAL_PORT,
+    CONF_LOCAL_SLAVE_ID,
     CONF_USE_LOCAL_API,
+    DEFAULT_LOCAL_PORT,
     DEFAULT_LOCAL_SCAN_INTERVAL,
+    DEFAULT_LOCAL_SLAVE_ID,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
@@ -105,15 +109,21 @@ class FranklinWHConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=info["title"], data=user_input)
 
         # Build the data schema
-        # Note: Local API fields are shown but not functional yet
+        # Note: Local API fields are optional - user can skip local mode during setup
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME): cv.string,
                 vol.Required(CONF_PASSWORD): cv.string,
                 vol.Required(CONF_GATEWAY_ID): cv.string,
-                # Local API not functional yet - fields shown but ignored
-                # vol.Optional(CONF_USE_LOCAL_API, default=False): cv.boolean,
-                # vol.Optional(CONF_LOCAL_HOST): cv.string,
+                # Local API options (all optional - skip for cloud-only mode)
+                vol.Optional(CONF_USE_LOCAL_API, default=False): cv.boolean,
+                vol.Optional(CONF_LOCAL_HOST): cv.string,
+                vol.Optional(CONF_LOCAL_PORT, default=DEFAULT_LOCAL_PORT): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=65535)
+                ),
+                vol.Optional(CONF_LOCAL_SLAVE_ID, default=DEFAULT_LOCAL_SLAVE_ID): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=255)
+                ),
             }
         )
 
@@ -173,15 +183,11 @@ class FranklinWHConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> FranklinWHOptionsFlow:
         """Get the options flow for this handler."""
-        return FranklinWHOptionsFlow(config_entry)
+        return FranklinWHOptionsFlow()
 
 
 class FranklinWHOptionsFlow(config_entries.OptionsFlow):
     """Handle options flow for FranklinWH."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -195,15 +201,27 @@ class FranklinWHOptionsFlow(config_entries.OptionsFlow):
             "scan_interval",
             DEFAULT_SCAN_INTERVAL,
         )
+        use_local_api = self.config_entry.options.get(CONF_USE_LOCAL_API, False)
+        local_host = self.config_entry.options.get(CONF_LOCAL_HOST)
+        local_port = self.config_entry.options.get(CONF_LOCAL_PORT, DEFAULT_LOCAL_PORT)
+        local_slave_id = self.config_entry.options.get(
+            CONF_LOCAL_SLAVE_ID, DEFAULT_LOCAL_SLAVE_ID
+        )
 
         data_schema = vol.Schema(
             {
                 vol.Optional("scan_interval", default=scan_interval): vol.All(
                     vol.Coerce(int), vol.Range(min=30, max=3600)
                 ),
-                # Local API options disabled - not functional yet
-                # vol.Optional(CONF_USE_LOCAL_API, default=False): cv.boolean,
-                # vol.Optional(CONF_LOCAL_HOST, default=""): cv.string,
+                # Local API options
+                vol.Optional(CONF_USE_LOCAL_API, default=use_local_api): cv.boolean,
+                vol.Optional(CONF_LOCAL_HOST, default=local_host or ""): cv.string,
+                vol.Optional(CONF_LOCAL_PORT, default=local_port): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=65535)
+                ),
+                vol.Optional(CONF_LOCAL_SLAVE_ID, default=local_slave_id): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=255)
+                ),
             }
         )
 

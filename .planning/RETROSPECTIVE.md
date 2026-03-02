@@ -80,6 +80,49 @@
 
 ---
 
+## Milestone: v1.2 — SunSpec/Modbus Local API
+
+**Shipped:** 2026-03-01
+**Phases:** 5 (4-8) | **Plans:** 7 | **Sessions:** ~4
+
+### What Was Built
+- `SunSpecModbusClient` class reads SunSpec Models 502/701/713/714 using pySunSpec2 in a thread executor — all Modbus I/O non-blocking
+- Config flow and options flow wired for Modbus TCP host/port/slave ID; local mode togglable without cloud credential re-entry
+- Hybrid coordinator: Modbus for real-time power flow (10s interval), cloud for energy totals (kWh) and all write operations
+- Graceful degradation: Modbus failures fall back to cloud automatically; startup unaffected if Modbus unreachable
+- Two bug-closure phases (7, 8) added after audit: first-setup options read, async executor misuse, options update listener, grid polarity double-inversion
+
+### What Worked
+- Per-phase VERIFICATION.md files (enabled this milestone) caught static code correctness early — verifier found issues Phase 5 static verification missed
+- Integration checker at milestone audit found two cross-phase bugs (MCONF-02, MDATA-04) that static per-phase verification passed — cross-phase wiring analysis is non-negotiable
+- Audit → gap-closure phases workflow was clean: audit identified specific bugs, Phases 7+8 closed them precisely
+- `gsd-verifier` now generates VERIFICATION.md — 3-source cross-reference works correctly; confidence higher than v1.0/v1.1
+- Hybrid data strategy (Modbus current + cloud totals) was the right architectural decision — the two data paths are orthogonal and easy to reason about separately
+
+### What Was Inefficient
+- Phase 5 SUMMARY.md files were never written — 0 summaries for 2 plans. Integration kept executing and auditing correctly, but accomplishments were undocumented and milestone tooling reported 0 tasks/accomplishments
+- ROADMAP.md listed v1.2 as "Phases 4-6" throughout gap-closure phases 7+8 — stale header created confusion; roadmap should be updated as phases are added
+- First audit identified MCONF-02 and MDATA-04 bugs that should have been caught during Phase 5 static verification — the double-negation bug and missing `add_update_listener` were detectable from code review
+
+### Patterns Established
+- **Options-then-data fallback**: `entry.options.get(KEY, entry.data.get(KEY, DEFAULT))` for all config keys read in `async_setup_entry` — required for first-setup vs options-edit parity
+- **`add_update_listener` is mandatory**: Register unconditionally after `async_forward_entry_setups` — missing this breaks all options flow changes
+- **Single negation for sign normalization**: Coordinator is the canonical sign normalization point; sensor `value_fn` should be sign-neutral — never invert at two layers
+- **Gap-closure phases as first-class phases**: Post-audit bug fixes get their own numbered phases (7, 8) — clean execution trail, proper verification
+
+### Key Lessons
+1. **Integration checker is essential** — two bugs in this milestone were caught only at cross-phase audit, not per-phase verification. Always run it.
+2. **Write SUMMARY.md files for every plan** — Phase 5's missing summaries meant 0 accomplishments recorded; milestone tooling couldn't extract deliverables. The GSD executor should enforce this.
+3. **Update ROADMAP.md header when scope expands** — adding gap-closure phases without updating the milestone header ("Phases 4-6") created a misleading record. Update it as you add phases.
+4. **`async_add_executor_job` for sync-only** — pySunSpec2 is synchronous; cloud httpx client is async. Never wrap async methods in executor jobs. Check library type before choosing dispatch pattern.
+
+### Cost Observations
+- Model mix: ~100% sonnet
+- Sessions: ~4
+- Notable: The audit → gap closure → re-audit cycle added 2 phases but closed real correctness bugs. Worth the cost. Initial estimate of 3 phases (4-6) grew to 5 due to bugs found at audit.
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -88,9 +131,11 @@
 |-----------|----------|--------|------------|
 | v1.0 | ~3 | 2 | Initial migration — established HACS-compliant structure |
 | v1.1 | 1 | 1 | Single-fix milestone — vendoring + session injection |
+| v1.2 | ~4 | 5 (planned 3, grew to 5) | Feature milestone — Modbus local API, hybrid data, gap closure |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. **Enable verifier** — `verifier_enabled: false` has appeared in both milestones, consistently degrading audit confidence
-2. Check external service prerequisites (GitHub settings, CI workflow states) during research, not during execution
-3. Single-phase fix milestones execute in one session — scope tightly and ship fast
+1. **Enable verifier** — `verifier_enabled: false` appeared in v1.0 and v1.1; v1.2 enabled it and audit confidence improved significantly. Always on.
+2. **Integration checker at audit is non-negotiable** — per-phase static verification cannot catch cross-phase wiring bugs; v1.2 found two (MCONF-02, MDATA-04) only at cross-phase audit
+3. **Write SUMMARY.md for every plan** — missing summaries (Phase 5 in v1.2) degrade milestone tooling and milestone records; executor should enforce this
+4. Check external service prerequisites (GitHub settings, CI workflow states) during research, not during execution

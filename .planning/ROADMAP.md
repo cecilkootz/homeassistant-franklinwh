@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 HACS Structure Migration** — Phases 1-2 (shipped 2026-02-28)
 - ✅ **v1.1 Fix Blocking HTTP Client** — Phase 3 (shipped 2026-02-28)
-- 🚧 **v1.2 SunSpec/Modbus Local API** — Phases 4-6 (in progress)
+- ✅ **v1.2 SunSpec/Modbus Local API** — Phases 4-8 (shipped 2026-03-01)
 
 ## Phases
 
@@ -27,49 +27,18 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 
 </details>
 
-### 🚧 v1.2 SunSpec/Modbus Local API (In Progress)
+<details>
+<summary>✅ v1.2 SunSpec/Modbus Local API (Phases 4-8) — SHIPPED 2026-03-01</summary>
 
-**Milestone Goal:** Add a local Modbus TCP data path that replaces cloud reads with faster SunSpec polling while keeping cloud for write operations and energy totals.
+- [x] Phase 4: Modbus Client Layer (2/2 plans) — completed 2026-02-28
+- [x] Phase 5: Config Flow and Coordinator Wiring (2/2 plans) — completed 2026-02-28
+- [x] Phase 6: Hybrid Data and Resilience (1/1 plans) — completed 2026-03-01
+- [x] Phase 7: Fix Runtime Integration Bugs (1/1 plans) — completed 2026-03-01
+- [x] Phase 8: Fix Options Listener and Grid Polarity (1/1 plans) — completed 2026-03-01
 
-- [ ] **Phase 4: Modbus Client Layer** - SunSpec Modbus TCP client wrapper reads Models 502/701/713/714, runs in executor, returns typed data
-- [ ] **Phase 5: Config Flow and Coordinator Wiring** - Host/port/slave ID UI in setup flow, options flow toggle, coordinator calls Modbus client at 10s when enabled
-- [ ] **Phase 6: Hybrid Data and Resilience** - Energy total sensors use cloud data, Modbus failures degrade gracefully, integration loads on startup if Modbus unreachable
+Full details: `.planning/milestones/v1.2-ROADMAP.md`
 
-## Phase Details
-
-### Phase 4: Modbus Client Layer
-**Goal**: A standalone SunSpec Modbus TCP client exists that reads the four required models and returns typed data without blocking the HA event loop
-**Depends on**: Phase 3 (complete baseline)
-**Requirements**: MDATA-01, MDATA-02, MDATA-03, MDATA-04, MDATA-05
-**Success Criteria** (what must be TRUE):
-  1. `sunspec2` is listed in `manifest.json` requirements and installs cleanly
-  2. A `SunSpecModbusClient` class exists that connects to a Modbus TCP host and reads Models 502, 701, 713, and 714
-  3. The client returns a typed data object with `battery_soc`, `battery_dc_power`, `solar_power`, and `grid_ac_power` fields
-  4. `home_load` is computed as `solar_power + battery_dc_power - grid_ac_power` and included in the returned data
-  5. All Modbus I/O executes in an executor (never called directly on the HA event loop)
-**Plans**: TBD
-
-### Phase 5: Config Flow and Coordinator Wiring
-**Goal**: Users can configure Modbus host/port/slave ID during setup and toggle local mode via options flow; the coordinator polls Modbus at 10s when enabled
-**Depends on**: Phase 4
-**Requirements**: MCONF-01, MCONF-02, MDATA-06
-**Success Criteria** (what must be TRUE):
-  1. During integration setup, an optional step offers Modbus TCP host, port (default 502), and slave ID (default 1) fields
-  2. The options flow has a toggle to enable or disable local Modbus mode without re-entering cloud credentials
-  3. When local Modbus is enabled, the coordinator polls the Modbus client every 10 seconds (vs 60s cloud interval)
-  4. When local Modbus is disabled, coordinator behavior is identical to pre-v1.2 cloud-only mode
-**Plans**: TBD
-
-### Phase 6: Hybrid Data and Resilience
-**Goal**: Sensors without Modbus equivalents use cloud data, and Modbus failures never mark the integration unavailable
-**Depends on**: Phase 5
-**Requirements**: MDATA-07, MRES-01, MRES-02, MRES-03
-**Success Criteria** (what must be TRUE):
-  1. Energy total sensors (battery_charge kWh, battery_discharge kWh, etc.) report cloud values even when local Modbus is enabled
-  2. Write operations (set_operation_mode, set_battery_reserve, smart switches) always route to the cloud API regardless of Modbus mode
-  3. When Modbus connection fails mid-operation, entities remain available showing last known data and a warning is logged — no integration-unavailable error is raised
-  4. If Modbus is configured but unreachable at HA startup, the integration loads successfully and serves cloud data
-**Plans**: TBD
+</details>
 
 ## Progress
 
@@ -78,6 +47,8 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 | 1. File Relocation | v1.0 | 1/1 | Complete | 2026-02-28 |
 | 2. Verification and Documentation | v1.0 | 1/1 | Complete | 2026-02-28 |
 | 3. Vendor and Wire HTTP Client | v1.1 | 2/2 | Complete | 2026-02-28 |
-| 4. Modbus Client Layer | v1.2 | 0/? | Not started | - |
-| 5. Config Flow and Coordinator Wiring | v1.2 | 0/? | Not started | - |
-| 6. Hybrid Data and Resilience | v1.2 | 0/? | Not started | - |
+| 4. Modbus Client Layer | v1.2 | 2/2 | Complete | 2026-02-28 |
+| 5. Config Flow and Coordinator Wiring | v1.2 | 2/2 | Complete | 2026-02-28 |
+| 6. Hybrid Data and Resilience | v1.2 | 1/1 | Complete | 2026-03-01 |
+| 7. Fix Runtime Integration Bugs | v1.2 | 1/1 | Complete | 2026-03-01 |
+| 8. Fix Options Listener and Grid Polarity | v1.2 | 1/1 | Complete | 2026-03-01 |
