@@ -161,6 +161,15 @@ class Totals:
     switch_2_use: float
     v2l_export: float
     v2l_import: float
+    solar_to_home: float
+    grid_to_home: float
+    battery_to_home: float
+    generator_to_home: float
+    grid_to_battery: float
+    solar_to_battery: float
+    solar_to_grid: float
+    battery_to_grid: float
+    ambient_temperature: float
 
 
 @dataclass
@@ -169,6 +178,18 @@ class Stats:
 
     current: Current
     totals: Totals
+
+
+@dataclass
+class ApowerInfo:
+    """Information about an individual aPower battery unit in the cluster."""
+
+    apower_sn: str
+    rated_power: float  # kW
+    rated_capacity: float  # kWh
+    status: int
+    remaining_power: float  # kWh
+    soc: float  # %
 
 
 MODE_TIME_OF_USE = "time_of_use"
@@ -491,6 +512,7 @@ class Client(HttpClientFactory):
 
     # TODO(richo) Setup timeouts and deal with them gracefully.
     async def _post(self, url, payload, params: dict | None = None):
+        self.logger.debug("[cloud] POST %s", url)
         if params is not None:
             params = params.copy()
             params.update({"gatewayId": self.gateway, "lang": "en_US"})
@@ -511,6 +533,7 @@ class Client(HttpClientFactory):
         return await retry(__post, lambda j: j["code"] != 401, self.refresh_token)
 
     async def _post_form(self, url, payload):
+        self.logger.debug("[cloud] POST (form) %s", url)
         async def __post():
             return (
                 await self.session.post(
@@ -527,6 +550,7 @@ class Client(HttpClientFactory):
         return await retry(__post, lambda j: j["code"] != 401, self.refresh_token)
 
     async def _get(self, url, params: dict | None = None):
+        self.logger.debug("[cloud] GET %s", url)
         if params is None:
             params = {}
         else:
@@ -686,6 +710,15 @@ class Client(HttpClientFactory):
                 sw_data["SW2ExpEnergy"],
                 sw_data["CarSWExpEnergy"],
                 sw_data["CarSWImpEnergy"],
+                data["kwhSolarLoad"] / 1000,
+                data["kwhGridLoad"] / 1000,
+                data["kwhFhpLoad"] / 1000,
+                data["kwhGenLoad"] / 1000,
+                data["gridChBat"] / 1000,
+                data["soChBat"] / 1000,
+                data["soOutGrid"] / 1000,
+                data["batOutGrid"] / 1000,
+                data["t_amb"],
             ),
         )
 
@@ -760,6 +793,22 @@ class Client(HttpClientFactory):
         url = self.url_base + "hes-gateway/terminal/updateIotGenerator"
         payload = {"manuSw": 1 + int(enabled), "gatewayId": self.gateway, "opt": 1}
         await self._post(url, json.dumps(payload))
+
+    async def get_apowers_info(self) -> list[ApowerInfo]:
+        """Get information about individual aPower battery units in the cluster."""
+        url = self.url_base + "hes-gateway/terminal/obtainApowersInfo"
+        result = (await self._get(url))["result"]
+        return [
+            ApowerInfo(
+                apower_sn=item["apowerSn"],
+                rated_power=item["ratedPower"],
+                rated_capacity=item["ratedCapacity"],
+                status=item["status"],
+                remaining_power=item["remainingPower"],
+                soc=item["soc"],
+            )
+            for item in result
+        ]
 
     async def get_home_gateway_list(self):
         """Get the list of Home Gateways associated with the account.

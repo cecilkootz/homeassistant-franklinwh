@@ -219,8 +219,8 @@ class FranklinWHOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(CONF_LOCAL_PORT, default=local_port): vol.All(
                     vol.Coerce(int), vol.Range(min=1, max=65535)
                 ),
-                vol.Optional(CONF_LOCAL_SLAVE_ID, default=local_slave_id): vol.All(
-                    vol.Coerce(int), vol.Range(min=1, max=255)
+                vol.Optional(CONF_LOCAL_SLAVE_ID, default=str(local_slave_id)): vol.All(
+                    str, vol.Coerce(int), vol.Range(min=1, max=255)
                 ),
             }
         )

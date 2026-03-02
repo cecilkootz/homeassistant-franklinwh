@@ -6,7 +6,7 @@ from datetime import timedelta
 import logging
 
 from .franklinwh import Client, TokenFetcher, Mode
-from .franklinwh.client import Stats
+from .franklinwh.client import ApowerInfo, Stats
 from .sunspec_client import SunSpecModbusClient, SunSpecData
 
 from homeassistant.config_entries import ConfigEntry
@@ -24,11 +24,15 @@ class FranklinWHData:
     """Class to hold FranklinWH data."""
 
     def __init__(
-        self, stats: Stats, switch_state: tuple[bool, bool, bool] | None = None
+        self,
+        stats: Stats,
+        switch_state: tuple[bool, bool, bool] | None = None,
+        apowers_info: list[ApowerInfo] | None = None,
     ) -> None:
         """Initialize the data class."""
         self.stats = stats
         self.switch_state = switch_state or (False, False, False)
+        self.apowers_info = apowers_info or []
 
 
 class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
@@ -120,6 +124,16 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                     # Read from Modbus via executor
                     sunspec_data = await self._sunspec_client.read(self.hass)
 
+                    _LOGGER.debug(
+                        "[modbus] metrics collected: battery_soc=%.1f%% battery_dc_power=%.1fW "
+                        "solar_power=%.1fW grid_ac_power=%.1fW home_load=%.1fW",
+                        sunspec_data.battery_soc,
+                        sunspec_data.battery_dc_power,
+                        sunspec_data.solar_power,
+                        sunspec_data.grid_ac_power,
+                        sunspec_data.home_load,
+                    )
+
                     # Fetch cloud data for energy totals and switch state
                     cloud_stats = await self._fetch_cloud_stats_fallback()
 
@@ -129,7 +143,7 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                     return FranklinWHData(
                         stats=Stats(
                             current=self._map_sunspec_to_stats_current(sunspec_data),
-                            totals=cloud_stats.totals if cloud_stats else self._get_default_totals(),
+                            totals=cloud_stats.stats.totals if cloud_stats else self._get_default_totals(),
                         ),
                         switch_state=cloud_stats.switch_state if cloud_stats else None,
                     )
@@ -151,10 +165,23 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                 raise UpdateFailed("Failed to fetch stats from FranklinWH API")
 
             _LOGGER.debug(
-                "Stats fetched - SOC: %s%%, Solar: %skW, Grid: %skW",
-                getattr(stats.current, 'battery_soc', 'N/A') if stats.current else 'N/A',
-                getattr(stats.current, 'solar_production', 'N/A') if stats.current else 'N/A',
-                getattr(stats.current, 'grid_use', 'N/A') if stats.current else 'N/A',
+                "[cloud] metrics collected: battery_soc=%.1f%% solar=%.3fkW grid=%.3fkW "
+                "battery=%.3fkW home_load=%.3fkW switch1=%.3fkW switch2=%.3fkW | "
+                "totals: solar=%.2fkWh grid_import=%.2fkWh grid_export=%.2fkWh "
+                "batt_charge=%.2fkWh batt_discharge=%.2fkWh home_use=%.2fkWh",
+                stats.current.battery_soc if stats.current else float("nan"),
+                stats.current.solar_production if stats.current else float("nan"),
+                stats.current.grid_use if stats.current else float("nan"),
+                stats.current.battery_use if stats.current else float("nan"),
+                stats.current.home_load if stats.current else float("nan"),
+                stats.current.switch_1_load if stats.current else float("nan"),
+                stats.current.switch_2_load if stats.current else float("nan"),
+                stats.totals.solar if stats.totals else float("nan"),
+                stats.totals.grid_import if stats.totals else float("nan"),
+                stats.totals.grid_export if stats.totals else float("nan"),
+                stats.totals.battery_charge if stats.totals else float("nan"),
+                stats.totals.battery_discharge if stats.totals else float("nan"),
+                stats.totals.home_use if stats.totals else float("nan"),
             )
 
             # Fetch switch state (async method in franklinwh 1.0.0+)
@@ -164,10 +191,17 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                 _LOGGER.debug("Failed to fetch switch state: %s", err)
                 switch_state = None
 
+            # Fetch per-battery info (cloud-only)
+            apowers_info = None
+            try:
+                apowers_info = await self.client.get_apowers_info()
+            except Exception as err:
+                _LOGGER.debug("Failed to fetch apowers info: %s", err)
+
             # Reset failure counter on success
             self._consecutive_failures = 0
 
-            return FranklinWHData(stats=stats, switch_state=switch_state)
+            return FranklinWHData(stats=stats, switch_state=switch_state, apowers_info=apowers_info)
 
         except AttributeError as err:
             # Handle case where AuthenticationError doesn't exist in franklinwh

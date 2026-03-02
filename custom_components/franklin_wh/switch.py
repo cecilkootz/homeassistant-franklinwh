@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Any
 
-from franklinwh import AccessoryType, GridStatus
+from .franklinwh import AccessoryType, GridStatus
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
@@ -30,7 +30,8 @@ async def async_setup_entry(
     coordinator: FranklinWHCoordinator = hass.data[DOMAIN][entry.entry_id]
     entities: list[SwitchEntity] = [GridSwitch(coordinator, entry)]
 
-    await coordinator.async_config_entry_first_refresh()
+    if not coordinator.last_update_success:
+        await coordinator.async_refresh()
     accessories = await coordinator.client.get_accessories()
     _LOGGER.debug("Accessories: %s", accessories)
 

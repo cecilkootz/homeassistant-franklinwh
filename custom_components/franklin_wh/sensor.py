@@ -17,6 +17,7 @@ from homeassistant.const import (
     PERCENTAGE,
     UnitOfEnergy,
     UnitOfPower,
+    UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -25,6 +26,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_GATEWAY_ID, DOMAIN, MANUFACTURER, MODEL
 from .coordinator import FranklinWHCoordinator, FranklinWHData
+from .franklinwh.client import ApowerInfo
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -210,6 +212,78 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda data: data.stats.totals.home_use if data.stats else None,
     ),
+    FranklinWHSensorEntityDescription(
+        key="solar_to_home",
+        name="Solar to Home",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: data.stats.totals.solar_to_home if data.stats else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="grid_to_home",
+        name="Grid to Home",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: data.stats.totals.grid_to_home if data.stats else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="battery_to_home",
+        name="Battery to Home",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: data.stats.totals.battery_to_home if data.stats else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="generator_to_home",
+        name="Generator to Home",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: data.stats.totals.generator_to_home if data.stats else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="grid_to_battery",
+        name="Grid to Battery",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: data.stats.totals.grid_to_battery if data.stats else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="solar_to_battery",
+        name="Solar to Battery",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: data.stats.totals.solar_to_battery if data.stats else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="solar_to_grid",
+        name="Solar to Grid",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: data.stats.totals.solar_to_grid if data.stats else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="battery_to_grid",
+        name="Battery to Grid",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: data.stats.totals.battery_to_grid if data.stats else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="ambient_temperature",
+        name="Ambient Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.stats.totals.ambient_temperature if data.stats else None,
+    ),
 )
 
 
@@ -220,13 +294,35 @@ async def async_setup_entry(
 ) -> None:
     """Set up FranklinWH sensor based on a config entry."""
     coordinator: FranklinWHCoordinator = hass.data[DOMAIN][entry.entry_id]
-    
-    entities = [
+
+    async_add_entities([
         FranklinWHSensorEntity(coordinator, description, entry)
         for description in SENSOR_TYPES
-    ]
-    
-    async_add_entities(entities)
+    ])
+
+    # Dynamically add aPower device sensors as units are discovered
+    known_apowers: set[str] = set()
+
+    def _add_new_apowers() -> None:
+        if not coordinator.data or not coordinator.data.apowers_info:
+            return
+        new_entities = []
+        for apower in coordinator.data.apowers_info:
+            sn = apower.apower_sn
+            if sn not in known_apowers:
+                known_apowers.add(sn)
+                new_entities.extend([
+                    FranklinWHApowerSocSensor(coordinator, sn, entry),
+                    FranklinWHApowerRemainingEnergySensor(coordinator, sn, entry),
+                    FranklinWHApowerStatusSensor(coordinator, sn, entry),
+                    FranklinWHApowerRatedCapacitySensor(coordinator, sn, entry),
+                    FranklinWHApowerRatedPowerSensor(coordinator, sn, entry),
+                ])
+        if new_entities:
+            async_add_entities(new_entities)
+
+    entry.async_on_unload(coordinator.async_add_listener(_add_new_apowers))
+    _add_new_apowers()
 
 
 class FranklinWHSensorEntity(CoordinatorEntity[FranklinWHCoordinator], SensorEntity):
@@ -281,3 +377,138 @@ class FranklinWHSensorEntity(CoordinatorEntity[FranklinWHCoordinator], SensorEnt
             and self.coordinator.data is not None
             and self.coordinator.data.stats is not None
         )
+
+
+class FranklinWHApowerBaseSensor(CoordinatorEntity[FranklinWHCoordinator], SensorEntity):
+    """Base class for per-aPower battery unit sensors."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: FranklinWHCoordinator,
+        apower_sn: str,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._apower_sn = apower_sn
+        gateway_id = entry.data[CONF_GATEWAY_ID]
+        short_sn = apower_sn[-6:]
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, apower_sn)},
+            name=f"FranklinWH Battery {short_sn}",
+            manufacturer=MANUFACTURER,
+            model="aPower",
+            via_device=(DOMAIN, gateway_id),
+        )
+
+    def _get_apower(self) -> ApowerInfo | None:
+        if not self.coordinator.data or not self.coordinator.data.apowers_info:
+            return None
+        for apower in self.coordinator.data.apowers_info:
+            if apower.apower_sn == self._apower_sn:
+                return apower
+        return None
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return super().available and self._get_apower() is not None
+
+
+class FranklinWHApowerSocSensor(FranklinWHApowerBaseSensor):
+    """State of charge sensor for an individual aPower battery unit."""
+
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_name = "State of Charge"
+
+    def __init__(self, coordinator: FranklinWHCoordinator, apower_sn: str, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, apower_sn, entry)
+        self._attr_unique_id = f"{apower_sn}_soc"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the state of charge."""
+        apower = self._get_apower()
+        return apower.soc if apower else None
+
+
+class FranklinWHApowerRemainingEnergySensor(FranklinWHApowerBaseSensor):
+    """Remaining energy sensor for an individual aPower battery unit."""
+
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY_STORAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_name = "Remaining Energy"
+
+    def __init__(self, coordinator: FranklinWHCoordinator, apower_sn: str, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, apower_sn, entry)
+        self._attr_unique_id = f"{apower_sn}_remaining_energy"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the remaining energy in kWh."""
+        apower = self._get_apower()
+        return apower.remaining_power if apower else None
+
+
+class FranklinWHApowerStatusSensor(FranklinWHApowerBaseSensor):
+    """Status sensor for an individual aPower battery unit."""
+
+    _attr_name = "Status"
+
+    def __init__(self, coordinator: FranklinWHCoordinator, apower_sn: str, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, apower_sn, entry)
+        self._attr_unique_id = f"{apower_sn}_status"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the status code."""
+        apower = self._get_apower()
+        return apower.status if apower else None
+
+
+class FranklinWHApowerRatedCapacitySensor(FranklinWHApowerBaseSensor):
+    """Rated capacity sensor for an individual aPower battery unit."""
+
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY_STORAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_name = "Rated Capacity"
+
+    def __init__(self, coordinator: FranklinWHCoordinator, apower_sn: str, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, apower_sn, entry)
+        self._attr_unique_id = f"{apower_sn}_rated_capacity"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the rated capacity in kWh."""
+        apower = self._get_apower()
+        return apower.rated_capacity if apower else None
+
+
+class FranklinWHApowerRatedPowerSensor(FranklinWHApowerBaseSensor):
+    """Rated power sensor for an individual aPower battery unit."""
+
+    _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_name = "Rated Power"
+
+    def __init__(self, coordinator: FranklinWHCoordinator, apower_sn: str, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, apower_sn, entry)
+        self._attr_unique_id = f"{apower_sn}_rated_power"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the rated power in kW."""
+        apower = self._get_apower()
+        return apower.rated_power if apower else None

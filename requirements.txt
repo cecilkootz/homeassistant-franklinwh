@@ -1,0 +1,4 @@
+homeassistant==2025.2.4
+pysunspec2==1.3.3
+colorlog==6.10.1
+pip>=21.3.1
