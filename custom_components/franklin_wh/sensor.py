@@ -139,7 +139,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Battery Charge",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.battery_charge if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -147,7 +147,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Battery Discharge",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.battery_discharge if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -155,7 +155,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Battery Charge from Grid",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: (
             # Battery charged from grid = Total battery charge - Solar energy
             # (assuming all solar goes to battery first, excess goes to home/grid)
@@ -204,7 +204,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Grid Import",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.grid_import if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -212,7 +212,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Grid Export",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.grid_export if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -228,7 +228,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Solar Energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.solar if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -244,7 +244,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Generator Energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.generator if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -308,7 +308,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Home Energy Total",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.home_use if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -346,7 +346,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Solar to Home",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.solar_to_home if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -354,7 +354,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Grid to Home",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.grid_to_home if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -362,7 +362,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Battery to Home",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.battery_to_home if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -370,7 +370,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Generator to Home",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.generator_to_home if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -378,7 +378,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Grid to Battery",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.grid_to_battery if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -386,7 +386,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Solar to Battery",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.solar_to_battery if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -394,7 +394,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Solar to Grid",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.solar_to_grid if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -402,7 +402,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Battery to Grid",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.totals.battery_to_grid if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
