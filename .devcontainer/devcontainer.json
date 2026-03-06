@@ -1,0 +1,50 @@
+{
+    "name": "franklinwh",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "args": {
+            "CLAUDE_CODE_VERSION": "latest"
+        }
+    },
+    "runArgs": [
+        "--cap-add=NET_ADMIN",
+        "--cap-add=NET_RAW"
+    ],
+    "postCreateCommand": "scripts/setup",
+    "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+    "waitFor": "postStartCommand",
+    "forwardPorts": [8123],
+    "portsAttributes": {
+        "8123": {
+            "label": "Home Assistant",
+            "onAutoForward": "notify"
+        }
+    },
+    "mounts": [
+        "source=franklinwh-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
+        "source=franklinwh-claude-config-${devcontainerId},target=/home/vscode/.claude,type=volume"
+    ],
+    "containerEnv": {
+        "NODE_OPTIONS": "--max-old-space-size=4096",
+        "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
+        "DEVCONTAINER": "true"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "anthropic.claude-code",
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "charliermarsh.ruff"
+            ],
+            "settings": {
+                "files.eol": "\n",
+                "editor.tabSize": 4,
+                "editor.formatOnSave": true,
+                "files.trimTrailingWhitespace": true,
+                "python.defaultInterpreterPath": "/usr/local/bin/python"
+            }
+        }
+    },
+    "remoteUser": "vscode"
+}

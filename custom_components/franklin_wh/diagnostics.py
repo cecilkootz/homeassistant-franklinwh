@@ -58,6 +58,7 @@ async def _async_get_coordinator_diagnostics(
                     "battery_use": getattr(stats.current, "battery_use", None),
                     "home_load": getattr(stats.current, "home_load", None),
                     "grid_use": getattr(stats.current, "grid_use", None),
+                    "mode_name": getattr(stats.current, "mode_name", None),
                     "solar_production": getattr(stats.current, "solar_production", None),
                     "generator_production": getattr(
                         stats.current, "generator_production", None
@@ -95,6 +96,34 @@ async def _async_get_coordinator_diagnostics(
             if len(coordinator.data.switch_state) > 2
             else None,
         }
+
+    if coordinator.data.mode_status:
+        diagnostics["mode_status"] = {
+            "mode_key": coordinator.data.mode_status.mode_key,
+            "mode_name": coordinator.data.mode_status.mode_name,
+            "current_mode_id": coordinator.data.mode_status.current_mode_id,
+            "current_reserve": coordinator.data.mode_status.current_reserve,
+            "time_of_use_reserve": coordinator.data.mode_status.time_of_use_reserve,
+            "self_consumption_reserve": coordinator.data.mode_status.self_consumption_reserve,
+            "emergency_backup_reserve": coordinator.data.mode_status.emergency_backup_reserve,
+        }
+
+    if coordinator.data.system_overview:
+        diagnostics["system_overview"] = {
+            "apower_count": coordinator.data.system_overview.apower_count,
+            "total_storage_capacity": coordinator.data.system_overview.total_storage_capacity,
+        }
+
+    if coordinator.data.charge_power_details:
+        diagnostics["charge_power_details"] = {
+            "estimated_backup_minutes": coordinator.data.charge_power_details.estimated_backup_minutes,
+            "estimated_backup_text": coordinator.data.charge_power_details.estimated_backup_text,
+        }
+
+    if coordinator.data.benefit_info:
+        diagnostics["benefit_info"] = {
+            "savings_today": coordinator.data.benefit_info.savings_today,
+            "currency": coordinator.data.benefit_info.currency,
+        }
     
     return diagnostics
-

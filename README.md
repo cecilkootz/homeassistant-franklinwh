@@ -113,9 +113,9 @@ After setup, all entities will be organized under a single **FranklinWH** device
 | **Battery Use** | Battery charging/discharging rate (negative = charging) | kW |
 | **Battery Charge** | Total energy charged to battery | kWh |
 | **Battery Discharge** | Total energy discharged from battery | kWh |
-| **Battery Charge from Grid** | Energy charged to battery from grid (calculated) | kWh |
+| **Battery Charge from Grid** | Energy charged to battery from grid (direct telemetry) | kWh |
 | **Home Load** | Instantaneous home power consumption | kW |
-| **Grid Use** | Net grid power (negative = importing, positive = exporting) | kW |
+| **Grid Use** | Net grid power (positive = importing, negative = exporting) | kW |
 | **Grid Import** | Total energy imported from grid | kWh |
 | **Grid Export** | Total energy exported to grid | kWh |
 | **Solar Production** | Instantaneous solar power generation | kW |
@@ -184,7 +184,7 @@ All energy sensors are compatible with Home Assistant's **Energy Dashboard**:
 2. Configure your energy sources:
    - **Solar Production**: Use "Solar Energy" sensor
    - **Battery**: Use "Battery Charge" and "Battery Discharge" sensors
-   - **Battery from Grid**: Use "Battery Charge from Grid" sensor (calculated)
+   - **Battery from Grid**: Use "Battery Charge from Grid" sensor
    - **Grid**: Use "Grid Import" and "Grid Export" sensors
 
 ---
@@ -353,7 +353,7 @@ You may choose either license when using or contributing to this project.
 
 ---
 
-## ⚠️ Disclaimer
+# ⚠️ Disclaimer
 
 This integration is not affiliated with, endorsed by, or supported by FranklinWH. Use at your own risk. The developers are not responsible for any damage to your system or equipment.
 

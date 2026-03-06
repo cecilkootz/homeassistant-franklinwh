@@ -5,17 +5,10 @@ DOMAIN: Final = "franklin_wh"
 
 # Configuration
 CONF_GATEWAY_ID: Final = "gateway_id"
-CONF_USE_LOCAL_API: Final = "use_local_api"
-CONF_LOCAL_HOST: Final = "local_host"
 
 # Default values
 DEFAULT_NAME: Final = "FranklinWH"
 DEFAULT_SCAN_INTERVAL: Final = 60  # seconds
-DEFAULT_LOCAL_SCAN_INTERVAL: Final = 10  # seconds for local API
-
-# API endpoints (for local API when available)
-LOCAL_API_PORT: Final = 8080
-LOCAL_API_TIMEOUT: Final = 10
 
 # Device info
 MANUFACTURER: Final = "FranklinWH"
@@ -33,6 +26,7 @@ ATTR_GENERATOR_PRODUCTION: Final = "generator_production"
 # Services
 SERVICE_SET_OPERATION_MODE: Final = "set_operation_mode"
 SERVICE_SET_BATTERY_RESERVE: Final = "set_battery_reserve"
+SERVICE_SET_MODE_RESERVE: Final = "set_mode_reserve"
 
 # Operation modes
 MODE_SELF_USE: Final = "self_use"
@@ -46,4 +40,3 @@ OPERATION_MODES: Final = [
     MODE_TIME_OF_USE,
     MODE_CLEAN_BACKUP,
 ]
-

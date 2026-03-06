@@ -40,4 +40,6 @@ Thumbs.db
 # Home Assistant
 *.log
 secrets.yaml
-
+testing/
+config/
+.claude/

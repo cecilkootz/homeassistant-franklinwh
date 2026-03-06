@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+usage() {
+    cat <<'EOF'
+Create a GitHub release for this repository.
+
+Usage:
+  scripts/release [options]
+
+Options:
+  --version <x.y.z>     Release version. Defaults to manifest.json "version".
+  --title <text>        Release title. Defaults to "v<version>".
+  --notes <text>        Release notes text.
+  --notes-file <path>   Read release notes from file.
+  --target <ref>        Git ref/commit to tag. Defaults to HEAD.
+  --draft               Create release as draft.
+  --prerelease          Mark release as prerelease.
+  --allow-dirty         Skip clean working tree check.
+  --dry-run             Print commands without executing.
+  -h, --help            Show this help.
+EOF
+}
+
+VERSION=""
+TITLE=""
+NOTES=""
+NOTES_FILE=""
+TARGET="HEAD"
+DRAFT=false
+PRERELEASE=false
+ALLOW_DIRTY=false
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --version)
+            VERSION="${2:-}"
+            shift 2
+            ;;
+        --title)
+            TITLE="${2:-}"
+            shift 2
+            ;;
+        --notes)
+            NOTES="${2:-}"
+            shift 2
+            ;;
+        --notes-file)
+            NOTES_FILE="${2:-}"
+            shift 2
+            ;;
+        --target)
+            TARGET="${2:-}"
+            shift 2
+            ;;
+        --draft)
+            DRAFT=true
+            shift
+            ;;
+        --prerelease)
+            PRERELEASE=true
+            shift
+            ;;
+        --allow-dirty)
+            ALLOW_DIRTY=true
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -n "$NOTES" && -n "$NOTES_FILE" ]]; then
+    echo "Use only one of --notes or --notes-file." >&2
+    exit 1
+fi
+
+if [[ -z "$VERSION" ]]; then
+    if [[ ! -f "custom_components/franklin_wh/manifest.json" ]]; then
+        echo "manifest.json not found and no --version supplied." >&2
+        exit 1
+    fi
+    VERSION="$(
+        python3 - <<'PY'
+import json
+from pathlib import Path
+manifest = json.loads(Path("custom_components/franklin_wh/manifest.json").read_text())
+print(manifest["version"])
+PY
+    )"
+fi
+
+if [[ -z "$VERSION" ]]; then
+    echo "Version is empty." >&2
+    exit 1
+fi
+
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+    echo "Version '$VERSION' does not look like semver (example: 1.2.3)." >&2
+    exit 1
+fi
+
+TAG="v${VERSION}"
+if [[ -z "$TITLE" ]]; then
+    TITLE="$TAG"
+fi
+
+if ! command -v gh >/dev/null 2>&1; then
+    echo "GitHub CLI (gh) is required." >&2
+    exit 1
+fi
+
+if ! command -v git >/dev/null 2>&1; then
+    echo "git is required." >&2
+    exit 1
+fi
+
+if ! gh auth status >/dev/null 2>&1; then
+    echo "Run 'gh auth login' first." >&2
+    exit 1
+fi
+
+if [[ "$ALLOW_DIRTY" == false ]]; then
+    if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+        echo "Working tree is not clean. Commit/stash changes or use --allow-dirty." >&2
+        exit 1
+    fi
+fi
+
+if ! git rev-parse --verify "$TARGET" >/dev/null 2>&1; then
+    echo "Target ref '$TARGET' was not found." >&2
+    exit 1
+fi
+
+if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+    echo "Tag '$TAG' already exists locally." >&2
+    exit 1
+fi
+
+if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+    echo "Tag '$TAG' already exists on origin." >&2
+    exit 1
+fi
+
+run_cmd() {
+    if [[ "$DRY_RUN" == true ]]; then
+        printf 'DRY RUN: '
+        printf '%q ' "$@"
+        printf '\n'
+    else
+        "$@"
+    fi
+}
+
+echo "Preparing release ${TAG} from ${TARGET}"
+
+run_cmd git tag -a "$TAG" "$TARGET" -m "$TITLE"
+run_cmd git push origin "refs/tags/$TAG"
+
+release_cmd=(gh release create "$TAG" --title "$TITLE")
+if [[ -n "$NOTES_FILE" ]]; then
+    if [[ ! -f "$NOTES_FILE" ]]; then
+        echo "Notes file '$NOTES_FILE' not found." >&2
+        exit 1
+    fi
+    release_cmd+=(--notes-file "$NOTES_FILE")
+elif [[ -n "$NOTES" ]]; then
+    release_cmd+=(--notes "$NOTES")
+else
+    release_cmd+=(--generate-notes)
+fi
+
+if [[ "$DRAFT" == true ]]; then
+    release_cmd+=(--draft)
+fi
+
+if [[ "$PRERELEASE" == true ]]; then
+    release_cmd+=(--prerelease)
+fi
+
+run_cmd "${release_cmd[@]}"
+
+echo "Release created: ${TAG}"
