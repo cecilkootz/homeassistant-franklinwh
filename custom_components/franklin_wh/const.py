@@ -26,6 +26,7 @@ ATTR_GENERATOR_PRODUCTION: Final = "generator_production"
 # Services
 SERVICE_SET_OPERATION_MODE: Final = "set_operation_mode"
 SERVICE_SET_BATTERY_RESERVE: Final = "set_battery_reserve"
+SERVICE_SET_MODE_RESERVE: Final = "set_mode_reserve"
 
 # Operation modes
 MODE_SELF_USE: Final = "self_use"
@@ -39,4 +40,3 @@ OPERATION_MODES: Final = [
     MODE_TIME_OF_USE,
     MODE_CLEAN_BACKUP,
 ]
-

@@ -78,7 +78,20 @@
           "description": "Minimum battery charge to maintain (0-100%)."
         }
       }
+    },
+    "set_mode_reserve": {
+      "name": "Set Mode Reserve",
+      "description": "Set the reserve percentage for a specific mode.",
+      "fields": {
+        "mode": {
+          "name": "Mode",
+          "description": "The mode to update."
+        },
+        "reserve_percent": {
+          "name": "Reserve Percentage",
+          "description": "Reserve to set for the selected mode (0-100%)."
+        }
+      }
     }
   }
 }
-

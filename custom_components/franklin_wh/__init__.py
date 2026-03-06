@@ -18,13 +18,19 @@ from .const import (
     CONF_GATEWAY_ID,
     DOMAIN,
     SERVICE_SET_BATTERY_RESERVE,
+    SERVICE_SET_MODE_RESERVE,
     SERVICE_SET_OPERATION_MODE,
 )
 from .coordinator import FranklinWHCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.SELECT,
+    Platform.NUMBER,
+]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -79,6 +85,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as err:
             _LOGGER.error("Failed to set battery reserve: %s", err)
 
+    async def handle_set_mode_reserve(call: ServiceCall) -> None:
+        """Handle the set_mode_reserve service call."""
+        mode = call.data.get("mode")
+        reserve_percent = call.data.get("reserve_percent")
+        try:
+            await coordinator.async_set_mode_reserve(mode, reserve_percent)
+        except Exception as err:
+            _LOGGER.error("Failed to set reserve for mode %s: %s", mode, err)
+
     # Register services only once
     if not hass.services.has_service(DOMAIN, SERVICE_SET_OPERATION_MODE):
         hass.services.async_register(
@@ -101,6 +116,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             handle_set_battery_reserve,
             schema=vol.Schema(
                 {vol.Required("reserve_percent"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100))}
+            ),
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_MODE_RESERVE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_MODE_RESERVE,
+            handle_set_mode_reserve,
+            schema=vol.Schema(
+                {
+                    vol.Required("mode"): vol.In(
+                        ["self_use", "backup", "time_of_use", "clean_backup"]
+                    ),
+                    vol.Required("reserve_percent"): vol.All(
+                        vol.Coerce(int),
+                        vol.Range(min=0, max=100),
+                    ),
+                }
             ),
         )
 

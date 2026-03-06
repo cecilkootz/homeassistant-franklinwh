@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 import logging
 
 from .franklinwh import Client, TokenFetcher, Mode
-from .franklinwh.client import ApowerInfo, Stats
+from .franklinwh.client import (
+    ApowerInfo,
+    BenefitInfo,
+    ChargePowerDetails,
+    ModeStatus,
+    Stats,
+    SystemOverview,
+    MODE_EMERGENCY_BACKUP,
+    MODE_SELF_CONSUMPTION,
+    MODE_TIME_OF_USE,
+)
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -27,11 +38,19 @@ class FranklinWHData:
         stats: Stats,
         switch_state: tuple[bool, bool, bool] | None = None,
         apowers_info: list[ApowerInfo] | None = None,
+        mode_status: ModeStatus | None = None,
+        system_overview: SystemOverview | None = None,
+        benefit_info: BenefitInfo | None = None,
+        charge_power_details: ChargePowerDetails | None = None,
     ) -> None:
         """Initialize the data class."""
         self.stats = stats
         self.switch_state = switch_state or (False, False, False)
         self.apowers_info = apowers_info or []
+        self.mode_status = mode_status
+        self.system_overview = system_overview
+        self.benefit_info = benefit_info
+        self.charge_power_details = charge_power_details
 
 
 class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
@@ -116,24 +135,87 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                 stats.totals.home_use if stats.totals else float("nan"),
             )
 
-            # Fetch switch state (async method in franklinwh 1.0.0+)
-            try:
-                switch_state = await self.client.get_smart_switch_state()
-            except Exception as err:
-                _LOGGER.debug("Failed to fetch switch state: %s", err)
-                switch_state = None
+            (
+                switch_state_res,
+                apowers_info_res,
+                mode_status_res,
+                system_overview_res,
+                benefit_info_res,
+                charge_power_details_res,
+            ) = await asyncio.gather(
+                self.client.get_smart_switch_state(),
+                self.client.get_apowers_info(),
+                self.client.get_mode_status(),
+                self.client.get_device_overall_info(),
+                self.client.get_benefit_info(),
+                self.client.get_charge_power_details(),
+                return_exceptions=True,
+            )
 
-            # Fetch per-battery info (cloud-only)
-            apowers_info = None
-            try:
-                apowers_info = await self.client.get_apowers_info()
-            except Exception as err:
-                _LOGGER.debug("Failed to fetch apowers info: %s", err)
+            switch_state = (
+                None if isinstance(switch_state_res, Exception) else switch_state_res
+            )
+            if isinstance(switch_state_res, Exception):
+                _LOGGER.debug("Failed to fetch switch state: %s", switch_state_res)
+
+            apowers_info = (
+                None if isinstance(apowers_info_res, Exception) else apowers_info_res
+            )
+            if isinstance(apowers_info_res, Exception):
+                _LOGGER.debug("Failed to fetch apowers info: %s", apowers_info_res)
+
+            mode_status = (
+                None if isinstance(mode_status_res, Exception) else mode_status_res
+            )
+            if isinstance(mode_status_res, Exception):
+                _LOGGER.debug("Failed to fetch mode status: %s", mode_status_res)
+
+            system_overview = (
+                None
+                if isinstance(system_overview_res, Exception)
+                else system_overview_res
+            )
+            if isinstance(system_overview_res, Exception):
+                _LOGGER.debug(
+                    "Failed to fetch system overview: %s", system_overview_res
+                )
+
+            benefit_info = (
+                None if isinstance(benefit_info_res, Exception) else benefit_info_res
+            )
+            if isinstance(benefit_info_res, Exception):
+                _LOGGER.debug("Failed to fetch benefit info: %s", benefit_info_res)
+
+            charge_power_details = (
+                None
+                if isinstance(charge_power_details_res, Exception)
+                else charge_power_details_res
+            )
+            if isinstance(charge_power_details_res, Exception):
+                _LOGGER.debug(
+                    "Failed to fetch charge power details: %s",
+                    charge_power_details_res,
+                )
+
+            # Enrich per-battery entries with real-time power from runtime status.
+            if apowers_info and stats.current.apower_power_by_sn:
+                for apower in apowers_info:
+                    apower.current_power = stats.current.apower_power_by_sn.get(
+                        apower.apower_sn
+                    )
 
             # Reset failure counter on success
             self._consecutive_failures = 0
 
-            return FranklinWHData(stats=stats, switch_state=switch_state, apowers_info=apowers_info)
+            return FranklinWHData(
+                stats=stats,
+                switch_state=switch_state,
+                apowers_info=apowers_info,
+                mode_status=mode_status,
+                system_overview=system_overview,
+                benefit_info=benefit_info,
+                charge_power_details=charge_power_details,
+            )
 
         except AttributeError as err:
             # Handle case where AuthenticationError doesn't exist in franklinwh
@@ -201,7 +283,7 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
         """Set the operation mode of the system."""
         try:
             # Map string mode to Mode factory methods
-            # Each mode gets a default reserve of 20% except emergency_backup (100%)
+            # Preserve currently configured reserve for each mode when switching.
             mode_map = {
                 "self_use": Mode.self_consumption,
                 "backup": Mode.emergency_backup,
@@ -214,8 +296,22 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
             if mode not in mode_map:
                 raise ValueError(f"Invalid mode: {mode}")
 
-            # Create mode object with default SOC
-            mode_obj = mode_map[mode]()
+            reserve = 20
+            if mode in ("backup", "clean_backup"):
+                reserve = 100
+
+            try:
+                mode_status = await self.client.get_mode_status()
+                if mode == "self_use" and mode_status.self_consumption_reserve is not None:
+                    reserve = mode_status.self_consumption_reserve
+                elif mode == "time_of_use" and mode_status.time_of_use_reserve is not None:
+                    reserve = mode_status.time_of_use_reserve
+                elif mode in ("backup", "clean_backup") and mode_status.emergency_backup_reserve is not None:
+                    reserve = mode_status.emergency_backup_reserve
+            except Exception as err:
+                _LOGGER.debug("Could not fetch mode reserves before switching: %s", err)
+
+            mode_obj = mode_map[mode](soc=reserve)
 
             # Set the mode via API (async method in franklinwh 1.0.0+)
             await self.client.set_mode(mode_obj)
@@ -226,6 +322,29 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
         except Exception as err:
             _LOGGER.error("Failed to set operation mode to %s: %s", mode, err)
             raise
+
+    async def async_set_mode_reserve(self, mode: str, reserve_percent: int) -> None:
+        """Set reserve percentage for a specific mode."""
+        mode_map = {
+            "self_use": Mode.self_consumption,
+            "self_consumption": Mode.self_consumption,
+            "backup": Mode.emergency_backup,
+            "emergency_backup": Mode.emergency_backup,
+            "time_of_use": Mode.time_of_use,
+            "clean_backup": Mode.emergency_backup,
+        }
+
+        if mode not in mode_map:
+            raise ValueError(f"Invalid mode: {mode}")
+
+        mode_obj = mode_map[mode](soc=reserve_percent)
+        await self.client.set_mode(mode_obj)
+        await self.async_request_refresh()
+        _LOGGER.info(
+            "Successfully set reserve for mode %s to %d%%",
+            mode,
+            reserve_percent,
+        )
 
     async def async_set_battery_reserve(self, reserve_percent: int) -> None:
         """Set the battery reserve percentage.
@@ -243,11 +362,14 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                 _LOGGER.warning("Could not retrieve current mode, defaulting to self_consumption: %s", err)
                 current_mode = None
 
-            # Create new mode with updated SOC
-            # Note: We need to detect the current mode type to preserve it
-            # For now, we default to self_consumption if we can't determine the mode
-            # TODO: Add mode type detection when the API provides mode information
-            mode_obj = Mode.self_consumption(soc=reserve_percent)
+            current_mode_key = current_mode[0] if current_mode else MODE_SELF_CONSUMPTION
+            mode_factory = {
+                MODE_TIME_OF_USE: Mode.time_of_use,
+                MODE_SELF_CONSUMPTION: Mode.self_consumption,
+                MODE_EMERGENCY_BACKUP: Mode.emergency_backup,
+            }.get(current_mode_key, Mode.self_consumption)
+
+            mode_obj = mode_factory(soc=reserve_percent)
 
             # Async method in franklinwh 1.0.0+
             await self.client.set_mode(mode_obj)

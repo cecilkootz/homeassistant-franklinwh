@@ -35,10 +35,81 @@ _LOGGER = logging.getLogger(__name__)
 class FranklinWHSensorEntityDescription(SensorEntityDescription):
     """Describes FranklinWH sensor entity."""
 
-    value_fn: Callable[[FranklinWHData], float | int | None] | None = None
+    value_fn: Callable[[FranklinWHData], Any] | None = None
+
+
+APOWER_STATUS_MAP = {
+    0: "Normal",
+}
+
+
+def _format_backup_time(minutes: int | None) -> str | None:
+    """Convert backup runtime minutes to app-like text."""
+    if minutes is None:
+        return None
+    hours = minutes // 60
+    mins = minutes % 60
+    return f"{hours} hours {mins} minutes"
 
 
 SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
+    FranklinWHSensorEntityDescription(
+        key="operation_mode",
+        name="Operation Mode",
+        device_class=SensorDeviceClass.ENUM,
+        options=["Time of Use (TOU)", "Self-Consumption", "Emergency Backup"],
+        value_fn=lambda data: data.mode_status.mode_name if data.mode_status else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="backup_reserve",
+        name="Backup Reserve",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.mode_status.current_reserve if data.mode_status else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="time_of_use_backup_reserve",
+        name="Time of Use Backup Reserve",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: (
+            data.mode_status.time_of_use_reserve if data.mode_status else None
+        ),
+    ),
+    FranklinWHSensorEntityDescription(
+        key="self_consumption_backup_reserve",
+        name="Self-Consumption Backup Reserve",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: (
+            data.mode_status.self_consumption_reserve if data.mode_status else None
+        ),
+    ),
+    FranklinWHSensorEntityDescription(
+        key="emergency_backup_reserve",
+        name="Emergency Backup Reserve",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: (
+            data.mode_status.emergency_backup_reserve if data.mode_status else None
+        ),
+    ),
+    FranklinWHSensorEntityDescription(
+        key="total_storage_capacity",
+        name="Total Storage Capacity",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY_STORAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: (
+            data.system_overview.total_storage_capacity if data.system_overview else None
+        ),
+    ),
+    FranklinWHSensorEntityDescription(
+        key="apower_count",
+        name="aPower Count",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.system_overview.apower_count if data.system_overview else None,
+    ),
     FranklinWHSensorEntityDescription(
         key="battery_soc",
         name="State of Charge",
@@ -49,11 +120,19 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
     ),
     FranklinWHSensorEntityDescription(
         key="battery_use",
-        name="Battery Use",
+        name="Battery Power",
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: data.stats.current.battery_use * -1 if data.stats else None,
+        value_fn=lambda data: data.stats.current.battery_use if data.stats else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="apower_cluster_power",
+        name="aPower Cluster Power",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.stats.current.battery_use if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
         key="battery_charge",
@@ -99,6 +178,26 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stats.current.grid_use if data.stats else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="grid_import_power",
+        name="Grid Import Power",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: (
+            max(data.stats.current.grid_use, 0) if data.stats else None
+        ),
+    ),
+    FranklinWHSensorEntityDescription(
+        key="grid_export_power",
+        name="Grid Export Power",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: (
+            abs(min(data.stats.current.grid_use, 0)) if data.stats else None
+        ),
     ),
     FranklinWHSensorEntityDescription(
         key="grid_import",
@@ -213,6 +312,36 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         value_fn=lambda data: data.stats.totals.home_use if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
+        key="used_today",
+        name="Used Today",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.stats.totals.home_use if data.stats else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="produced_today",
+        name="Produced Today",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.stats.totals.solar if data.stats else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="savings_today",
+        name="Savings Today",
+        value_fn=lambda data: data.benefit_info.savings_today if data.benefit_info else None,
+    ),
+    FranklinWHSensorEntityDescription(
+        key="estimated_backup_time",
+        name="Estimated Backup Time",
+        value_fn=lambda data: (
+            _format_backup_time(data.charge_power_details.estimated_backup_minutes)
+            if data.charge_power_details
+            else None
+        ),
+    ),
+    FranklinWHSensorEntityDescription(
         key="solar_to_home",
         name="Solar to Home",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -314,6 +443,7 @@ async def async_setup_entry(
                 new_entities.extend([
                     FranklinWHApowerSocSensor(coordinator, sn, entry),
                     FranklinWHApowerRemainingEnergySensor(coordinator, sn, entry),
+                    FranklinWHApowerCurrentPowerSensor(coordinator, sn, entry),
                     FranklinWHApowerStatusSensor(coordinator, sn, entry),
                     FranklinWHApowerRatedCapacitySensor(coordinator, sn, entry),
                     FranklinWHApowerRatedPowerSensor(coordinator, sn, entry),
@@ -356,7 +486,7 @@ class FranklinWHSensorEntity(CoordinatorEntity[FranklinWHCoordinator], SensorEnt
         )
 
     @property
-    def native_value(self) -> float | int | None:
+    def native_value(self) -> Any:
         """Return the state of the sensor."""
         if self.entity_description.value_fn is None:
             return None
@@ -457,6 +587,26 @@ class FranklinWHApowerRemainingEnergySensor(FranklinWHApowerBaseSensor):
         return apower.remaining_power if apower else None
 
 
+class FranklinWHApowerCurrentPowerSensor(FranklinWHApowerBaseSensor):
+    """Current power sensor for an individual aPower battery unit."""
+
+    _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_name = "Current Power"
+
+    def __init__(self, coordinator: FranklinWHCoordinator, apower_sn: str, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, apower_sn, entry)
+        self._attr_unique_id = f"{apower_sn}_current_power"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return current power in kW."""
+        apower = self._get_apower()
+        return apower.current_power if apower else None
+
+
 class FranklinWHApowerStatusSensor(FranklinWHApowerBaseSensor):
     """Status sensor for an individual aPower battery unit."""
 
@@ -468,10 +618,12 @@ class FranklinWHApowerStatusSensor(FranklinWHApowerBaseSensor):
         self._attr_unique_id = f"{apower_sn}_status"
 
     @property
-    def native_value(self) -> int | None:
-        """Return the status code."""
+    def native_value(self) -> str | None:
+        """Return the status text."""
         apower = self._get_apower()
-        return apower.status if apower else None
+        if not apower:
+            return None
+        return APOWER_STATUS_MAP.get(apower.status, f"Code {apower.status}")
 
 
 class FranklinWHApowerRatedCapacitySensor(FranklinWHApowerBaseSensor):

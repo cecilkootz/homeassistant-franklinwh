@@ -70,8 +70,19 @@ def empty_stats():
             0.0,
             0.0,
             GridStatus.NORMAL,
+            None,
+            {},
         ),
         Totals(
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
             0.0,
             0.0,
             0.0,
@@ -144,6 +155,8 @@ class Current:
     switch_2_load: float
     v2l_use: float
     grid_status: GridStatus
+    mode_name: str | None
+    apower_power_by_sn: dict[str, float]
 
 
 @dataclass
@@ -181,6 +194,53 @@ class Stats:
 
 
 @dataclass
+class ModeStatus:
+    """Current selected mode and reserve settings as shown in the app."""
+
+    mode_key: str | None
+    mode_name: str | None
+    current_mode_id: int | None
+    time_of_use_reserve: int | None
+    self_consumption_reserve: int | None
+    emergency_backup_reserve: int | None
+
+    @property
+    def current_reserve(self) -> int | None:
+        """Return reserve for the currently selected mode."""
+        if self.mode_key == MODE_TIME_OF_USE:
+            return self.time_of_use_reserve
+        if self.mode_key == MODE_SELF_CONSUMPTION:
+            return self.self_consumption_reserve
+        if self.mode_key == MODE_EMERGENCY_BACKUP:
+            return self.emergency_backup_reserve
+        return None
+
+
+@dataclass
+class SystemOverview:
+    """System-wide summary values shown in app settings/system pages."""
+
+    apower_count: int | None
+    total_storage_capacity: float | None
+
+
+@dataclass
+class BenefitInfo:
+    """Daily benefit and savings information."""
+
+    savings_today: float | None
+    currency: str | None
+
+
+@dataclass
+class ChargePowerDetails:
+    """Estimated backup runtime details."""
+
+    estimated_backup_minutes: int | None
+    estimated_backup_text: str | None
+
+
+@dataclass
 class ApowerInfo:
     """Information about an individual aPower battery unit in the cluster."""
 
@@ -190,6 +250,7 @@ class ApowerInfo:
     status: int
     remaining_power: float  # kWh
     soc: float  # %
+    current_power: float | None = None  # kW (negative = charging, positive = discharging)
 
 
 MODE_TIME_OF_USE = "time_of_use"
@@ -200,6 +261,18 @@ MODE_MAP = {
     9322: MODE_TIME_OF_USE,
     9323: MODE_SELF_CONSUMPTION,
     9324: MODE_EMERGENCY_BACKUP,
+}
+
+WORK_MODE_MAP = {
+    1: MODE_TIME_OF_USE,
+    2: MODE_SELF_CONSUMPTION,
+    3: MODE_EMERGENCY_BACKUP,
+}
+
+MODE_LABELS = {
+    MODE_TIME_OF_USE: "Time of Use (TOU)",
+    MODE_SELF_CONSUMPTION: "Self-Consumption",
+    MODE_EMERGENCY_BACKUP: "Emergency Backup",
 }
 
 
@@ -657,70 +730,122 @@ class Client(HttpClientFactory):
         # currendId=9323&gatewayId=___&lang=EN_US&oldIndex=2&soc=20&stromEn=1&workMode=2
         url = DEFAULT_URL_BASE + "hes-gateway/terminal/tou/updateTouMode"
         payload = mode.payload(self.gateway)
+        # The cloud API now uses per-site mode IDs. Resolve current IDs from TOU list.
+        try:
+            tou_data = await self.get_gateway_tou_list()
+            for item in tou_data.get("list", []):
+                if item.get("workMode") == mode.workMode:
+                    payload["currendId"] = str(item["id"])
+                    if "oldIndex" in item:
+                        payload["oldIndex"] = str(item["oldIndex"])
+                    break
+        except Exception:
+            # Fall back to the static IDs used by older firmware.
+            pass
         await self._post_form(url, payload)
 
     async def get_mode(self):
         """Get the current operating mode of the FranklinWH gateway."""
-        status = await self._switch_status()
-        # TODO(richo) These are actually wrong but I can't obviously find where to get the correct values right now.
-        mode_name = MODE_MAP[status["runingMode"]]
-        if mode_name == MODE_TIME_OF_USE:
-            return (mode_name, status["touMinSoc"])
-        if mode_name == MODE_SELF_CONSUMPTION:
-            return (mode_name, status["selfMinSoc"])
-        if mode_name == MODE_EMERGENCY_BACKUP:
-            return (mode_name, status["backupMaxSoc"])
-        raise RuntimeError(f"Unknown mode {status['runingMode']}")
+        mode_status = await self.get_mode_status()
+        if mode_status.mode_key is None:
+            raise RuntimeError("Unable to determine active mode")
+        reserve = mode_status.current_reserve
+        if reserve is None:
+            raise RuntimeError(f"Unable to determine reserve for mode {mode_status.mode_key}")
+        return (mode_status.mode_key, reserve)
 
     async def get_stats(self) -> Stats:
         """Get current statistics for the FHP.
 
         This includes instantaneous measurements for current power, as well as totals for today (in local time)
         """
-        tasks = [f() for f in [self.get_composite_info, self._switch_usage]]
-        info, sw_data = await asyncio.gather(*tasks)
-        data = info["runtimeData"]
+        status_data, sw_data = await asyncio.gather(self._status(), self._switch_usage())
+        data = status_data
         grid_status: GridStatus = GridStatus.NORMAL
         if "offgridreason" in data:
             grid_status = GridStatus.from_offgridreason(data["offgridreason"])
+        elif data.get("elecnet_state") == 1:
+            grid_status = GridStatus.DOWN
+
+        apower_power_by_sn: dict[str, float] = {}
+        fhp_sns = data.get("fhpSn", [])
+        fhp_powers = data.get("fhpPower", [])
+        for idx, sn in enumerate(fhp_sns):
+            if idx < len(fhp_powers):
+                apower_power_by_sn[str(sn)] = float(fhp_powers[idx])
 
         return Stats(
             Current(
-                data["p_sun"],
-                data["p_gen"],
-                data["genStat"] > 1,
-                data["p_fhp"],
-                data["p_uti"],
-                data["p_load"],
-                data["soc"],
-                sw_data["SW1ExpPower"],
-                sw_data["SW2ExpPower"],
-                sw_data["CarSWPower"],
+                float(data.get("p_sun", 0.0)),
+                float(data.get("p_gen", 0.0)),
+                int(data.get("genStat", 0)) > 1,
+                float(data.get("p_fhp", 0.0)),
+                float(data.get("p_uti", 0.0)),
+                float(data.get("p_load", 0.0)),
+                float(data.get("soc", 0.0)),
+                float(sw_data.get("SW1ExpPower", 0.0)),
+                float(sw_data.get("SW2ExpPower", 0.0)),
+                float(sw_data.get("CarSWPower", 0.0)),
                 grid_status,
+                data.get("name"),
+                apower_power_by_sn,
             ),
             Totals(
-                data["kwh_fhp_chg"],
-                data["kwh_fhp_di"],
-                data["kwh_uti_in"],
-                data["kwh_uti_out"],
-                data["kwh_sun"],
-                data["kwh_gen"],
-                data["kwh_load"],
-                sw_data["SW1ExpEnergy"],
-                sw_data["SW2ExpEnergy"],
-                sw_data["CarSWExpEnergy"],
-                sw_data["CarSWImpEnergy"],
-                data["kwhSolarLoad"] / 1000,
-                data["kwhGridLoad"] / 1000,
-                data["kwhFhpLoad"] / 1000,
-                data["kwhGenLoad"] / 1000,
-                data["gridChBat"] / 1000,
-                data["soChBat"] / 1000,
-                data["soOutGrid"] / 1000,
-                data["batOutGrid"] / 1000,
-                data["t_amb"],
+                float(data.get("kwh_fhp_chg", 0.0)),
+                float(data.get("kwh_fhp_di", 0.0)),
+                float(data.get("kwh_uti_in", 0.0)),
+                float(data.get("kwh_uti_out", 0.0)),
+                float(data.get("kwh_sun", 0.0)),
+                float(data.get("kwh_gen", 0.0)),
+                float(data.get("kwh_load", 0.0)),
+                float(sw_data.get("SW1ExpEnergy", 0.0)),
+                float(sw_data.get("SW2ExpEnergy", 0.0)),
+                float(sw_data.get("CarSWExpEnergy", 0.0)),
+                float(sw_data.get("CarSWImpEnergy", 0.0)),
+                float(data.get("kwhSolarLoad", 0.0)) / 1000,
+                float(data.get("kwhGridLoad", 0.0)) / 1000,
+                float(data.get("kwhFhpLoad", 0.0)) / 1000,
+                float(data.get("kwhGenLoad", 0.0)) / 1000,
+                float(data.get("gridChBat", 0.0)) / 1000,
+                float(data.get("soChBat", 0.0)) / 1000,
+                float(data.get("soOutGrid", 0.0)) / 1000,
+                float(data.get("batOutGrid", 0.0)) / 1000,
+                float(data.get("t_amb", 0.0)),
             ),
         )
+
+    @staticmethod
+    def _round_int(value: float | int | None) -> int | None:
+        """Round a numeric value to int, preserving None."""
+        if value is None:
+            return None
+        return int(round(float(value)))
+
+    @staticmethod
+    def _parse_duration_to_minutes(value: str | None) -> int | None:
+        """Parse duration text like '17 hour 57 minute' or '4 day 3 hour 0 minute'."""
+        if not value:
+            return None
+
+        total_minutes = 0
+        parts = value.replace(",", " ").split()
+        idx = 0
+        while idx < len(parts) - 1:
+            token = parts[idx]
+            unit = parts[idx + 1].lower()
+            if not token.isdigit():
+                idx += 1
+                continue
+            number = int(token)
+            if unit.startswith("day"):
+                total_minutes += number * 24 * 60
+            elif unit.startswith("hour"):
+                total_minutes += number * 60
+            elif unit.startswith("min"):
+                total_minutes += number
+            idx += 2
+
+        return total_minutes or None
 
     def next_snno(self):
         """Get the next sequence number for API requests."""
@@ -781,6 +906,104 @@ class Client(HttpClientFactory):
         url = self.url_base + "hes-gateway/terminal/getDeviceCompositeInfo"
         params = {"refreshFlag": 1}
         return (await self._get(url, params))["result"]
+
+    async def get_gateway_tou_list(self) -> dict:
+        """Get mode configuration list, including active mode and reserve SOC values."""
+        url = self.url_base + "hes-gateway/terminal/tou/getGatewayTouListV2"
+        return (await self._get(url))["result"]
+
+    async def get_mode_status(self) -> ModeStatus:
+        """Get current mode and reserve settings."""
+        result = await self.get_gateway_tou_list()
+        current_mode_id_raw = result.get("currendId")
+        current_mode_id = (
+            int(current_mode_id_raw)
+            if current_mode_id_raw is not None
+            else None
+        )
+        mode_key: str | None = None
+        mode_name: str | None = None
+        time_of_use_reserve: int | None = None
+        self_consumption_reserve: int | None = None
+        emergency_backup_reserve: int | None = None
+
+        for item in result.get("list", []):
+            work_mode = item.get("workMode")
+            this_mode_key = WORK_MODE_MAP.get(work_mode)
+            if this_mode_key is None:
+                continue
+
+            soc = self._round_int(item.get("soc"))
+            if this_mode_key == MODE_TIME_OF_USE:
+                time_of_use_reserve = soc
+            elif this_mode_key == MODE_SELF_CONSUMPTION:
+                self_consumption_reserve = soc
+            elif this_mode_key == MODE_EMERGENCY_BACKUP:
+                emergency_backup_reserve = soc
+
+            if item.get("id") == current_mode_id:
+                mode_key = this_mode_key
+                mode_name = MODE_LABELS.get(this_mode_key, item.get("name"))
+
+        if mode_key is None and current_mode_id is not None:
+            mode_key = MODE_MAP.get(int(current_mode_id))
+        if mode_name is None and mode_key is not None:
+            mode_name = MODE_LABELS.get(mode_key)
+
+        return ModeStatus(
+            mode_key=mode_key,
+            mode_name=mode_name,
+            current_mode_id=current_mode_id,
+            time_of_use_reserve=time_of_use_reserve,
+            self_consumption_reserve=self_consumption_reserve,
+            emergency_backup_reserve=emergency_backup_reserve,
+        )
+
+    async def get_device_overall_info(self) -> SystemOverview:
+        """Get overall system values (battery count and total storage capacity)."""
+        url = self.url_base + "hes-gateway/terminal/selectDeviceOverallInfo"
+        result = (await self._get(url))["result"]
+        return SystemOverview(
+            apower_count=result.get("apowerCount"),
+            total_storage_capacity=(
+                float(result["totalPower"]) if result.get("totalPower") is not None else None
+            ),
+        )
+
+    async def get_charge_power_details(self) -> ChargePowerDetails:
+        """Get estimated backup runtime details."""
+        url = self.url_base + "hes-gateway/terminal/chargePowerDetails"
+        result = (await self._get(url))["result"]
+        backup_text = result.get("currentTime")
+        return ChargePowerDetails(
+            estimated_backup_minutes=self._parse_duration_to_minutes(backup_text),
+            estimated_backup_text=backup_text,
+        )
+
+    async def get_benefit_info(self) -> BenefitInfo:
+        """Get daily savings information used by the app home card."""
+        url = self.url_base + "hes-gateway/terminal/bill/electric/selectBenefitInfo"
+        result = (await self._get(url))["result"]
+
+        savings_keys = (
+            "batFeedEarnList",
+            "batLoadEarnModList",
+            "batLoadEarnList",
+            "solarFeedEarnList",
+            "solarLoadEarnList",
+        )
+        savings_today = 0.0
+        has_value = False
+        for key in savings_keys:
+            values = result.get(key)
+            if isinstance(values, list) and values:
+                has_value = True
+                savings_today += float(values[-1] or 0)
+
+        return BenefitInfo(
+            savings_today=savings_today if has_value else None,
+            currency=result.get("currency"),
+        )
 
     async def set_generator(self, enabled: bool):
         """Enable or disable the generator on the FranklinWH gateway.
