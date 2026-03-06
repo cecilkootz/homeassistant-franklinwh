@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 import logging
 from typing import Any
 
@@ -23,10 +24,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import CONF_GATEWAY_ID, DOMAIN, MANUFACTURER, MODEL
 from .coordinator import FranklinWHCoordinator, FranklinWHData
-from .franklinwh.client import ApowerInfo
+from .franklinwh.client import (
+    ApowerInfo,
+    MODE_EMERGENCY_BACKUP,
+    MODE_SELF_CONSUMPTION,
+    MODE_TIME_OF_USE,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +43,7 @@ class FranklinWHSensorEntityDescription(SensorEntityDescription):
     """Describes FranklinWH sensor entity."""
 
     value_fn: Callable[[FranklinWHData], Any] | None = None
+    last_reset_fn: Callable[[FranklinWHData], datetime | None] | None = None
 
 
 APOWER_STATUS_MAP = {
@@ -52,13 +60,42 @@ def _format_backup_time(minutes: int | None) -> str | None:
     return f"{hours} hours {mins} minutes"
 
 
+def _mode_label_from_data(data: FranklinWHData) -> str | None:
+    """Return operation mode label from mode status, then runtime fallback."""
+    if data.mode_status:
+        if data.mode_status.mode_name:
+            return data.mode_status.mode_name
+        if data.mode_status.mode_key == MODE_TIME_OF_USE:
+            return "Time of Use (TOU)"
+        if data.mode_status.mode_key == MODE_SELF_CONSUMPTION:
+            return "Self-Consumption"
+        if data.mode_status.mode_key == MODE_EMERGENCY_BACKUP:
+            return "Emergency Backup"
+    if data.stats and data.stats.current and data.stats.current.mode_name:
+        name = str(data.stats.current.mode_name)
+        lowered = name.lower()
+        if "time" in lowered and "use" in lowered:
+            return "Time of Use (TOU)"
+        if "self" in lowered:
+            return "Self-Consumption"
+        if "backup" in lowered:
+            return "Emergency Backup"
+        return name
+    return None
+
+
+def _local_day_start(_: FranklinWHData) -> datetime:
+    """Return local midnight for daily-reset energy counters."""
+    return dt_util.start_of_local_day()
+
+
 SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
     FranklinWHSensorEntityDescription(
         key="operation_mode",
         name="Operation Mode",
         device_class=SensorDeviceClass.ENUM,
         options=["Time of Use (TOU)", "Self-Consumption", "Emergency Backup"],
-        value_fn=lambda data: data.mode_status.mode_name if data.mode_status else None,
+        value_fn=lambda data: _mode_label_from_data(data),
     ),
     FranklinWHSensorEntityDescription(
         key="backup_reserve",
@@ -139,7 +176,8 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Battery Charge",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL,
+        last_reset_fn=_local_day_start,
         value_fn=lambda data: data.stats.totals.battery_charge if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -147,7 +185,8 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Battery Discharge",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL,
+        last_reset_fn=_local_day_start,
         value_fn=lambda data: data.stats.totals.battery_discharge if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -204,7 +243,8 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Grid Import",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL,
+        last_reset_fn=_local_day_start,
         value_fn=lambda data: data.stats.totals.grid_import if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -212,7 +252,8 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Grid Export",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL,
+        last_reset_fn=_local_day_start,
         value_fn=lambda data: data.stats.totals.grid_export if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -228,7 +269,8 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         name="Solar Energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL,
+        last_reset_fn=_local_day_start,
         value_fn=lambda data: data.stats.totals.solar if data.stats else None,
     ),
     FranklinWHSensorEntityDescription(
@@ -507,6 +549,21 @@ class FranklinWHSensorEntity(CoordinatorEntity[FranklinWHCoordinator], SensorEnt
             and self.coordinator.data is not None
             and self.coordinator.data.stats is not None
         )
+
+    @property
+    def last_reset(self) -> datetime | None:
+        """Return last reset for daily total sensors."""
+        if self.entity_description.last_reset_fn is None:
+            return None
+        try:
+            return self.entity_description.last_reset_fn(self.coordinator.data)
+        except (AttributeError, TypeError, ValueError) as err:
+            _LOGGER.debug(
+                "Error getting last_reset for %s: %s",
+                self.entity_description.key,
+                err,
+            )
+            return None
 
 
 class FranklinWHApowerBaseSensor(CoordinatorEntity[FranklinWHCoordinator], SensorEntity):

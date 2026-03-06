@@ -169,6 +169,31 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
             )
             if isinstance(mode_status_res, Exception):
                 _LOGGER.debug("Failed to fetch mode status: %s", mode_status_res)
+                mode_status = self.data.mode_status if self.data else None
+            elif mode_status and self.data and self.data.mode_status:
+                prev_mode = self.data.mode_status
+                mode_status.mode_key = mode_status.mode_key or prev_mode.mode_key
+                mode_status.mode_name = mode_status.mode_name or prev_mode.mode_name
+                mode_status.current_mode_id = (
+                    mode_status.current_mode_id
+                    if mode_status.current_mode_id is not None
+                    else prev_mode.current_mode_id
+                )
+                mode_status.time_of_use_reserve = (
+                    mode_status.time_of_use_reserve
+                    if mode_status.time_of_use_reserve is not None
+                    else prev_mode.time_of_use_reserve
+                )
+                mode_status.self_consumption_reserve = (
+                    mode_status.self_consumption_reserve
+                    if mode_status.self_consumption_reserve is not None
+                    else prev_mode.self_consumption_reserve
+                )
+                mode_status.emergency_backup_reserve = (
+                    mode_status.emergency_backup_reserve
+                    if mode_status.emergency_backup_reserve is not None
+                    else prev_mode.emergency_backup_reserve
+                )
 
             system_overview = (
                 None
@@ -185,6 +210,7 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
             )
             if isinstance(benefit_info_res, Exception):
                 _LOGGER.debug("Failed to fetch benefit info: %s", benefit_info_res)
+                benefit_info = self.data.benefit_info if self.data else None
 
             charge_power_details = (
                 None
@@ -195,6 +221,9 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                 _LOGGER.debug(
                     "Failed to fetch charge power details: %s",
                     charge_power_details_res,
+                )
+                charge_power_details = (
+                    self.data.charge_power_details if self.data else None
                 )
 
             # Enrich per-battery entries with real-time power from runtime status.

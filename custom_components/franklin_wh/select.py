@@ -66,14 +66,29 @@ class FranklinWHModeSelect(CoordinatorEntity[FranklinWHCoordinator], SelectEntit
     @property
     def current_option(self) -> str | None:
         """Return current selected mode."""
-        if not self.coordinator.data or not self.coordinator.data.mode_status:
+        if not self.coordinator.data:
             return None
 
         mode_status = self.coordinator.data.mode_status
-        if mode_status.mode_name in MODE_OPTION_TO_SERVICE_MODE:
-            return mode_status.mode_name
-        if mode_status.mode_key:
-            return MODE_KEY_TO_OPTION.get(mode_status.mode_key)
+        if mode_status:
+            if mode_status.mode_name in MODE_OPTION_TO_SERVICE_MODE:
+                return mode_status.mode_name
+            if mode_status.mode_key:
+                return MODE_KEY_TO_OPTION.get(mode_status.mode_key)
+
+        runtime_name = (
+            self.coordinator.data.stats.current.mode_name
+            if self.coordinator.data.stats
+            else None
+        )
+        if runtime_name:
+            lowered = str(runtime_name).lower()
+            if "time" in lowered and "use" in lowered:
+                return "Time of Use (TOU)"
+            if "self" in lowered:
+                return "Self-Consumption"
+            if "backup" in lowered:
+                return "Emergency Backup"
         return None
 
     async def async_select_option(self, option: str) -> None:
@@ -87,4 +102,3 @@ class FranklinWHModeSelect(CoordinatorEntity[FranklinWHCoordinator], SelectEntit
         except Exception as err:
             _LOGGER.error("Failed to set mode to %s: %s", option, err)
             raise
-

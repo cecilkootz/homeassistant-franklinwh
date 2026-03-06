@@ -914,39 +914,92 @@ class Client(HttpClientFactory):
 
     async def get_mode_status(self) -> ModeStatus:
         """Get current mode and reserve settings."""
-        result = await self.get_gateway_tou_list()
-        current_mode_id_raw = result.get("currendId")
-        current_mode_id = (
-            int(current_mode_id_raw)
-            if current_mode_id_raw is not None
-            else None
-        )
+        current_mode_id: int | None = None
         mode_key: str | None = None
         mode_name: str | None = None
         time_of_use_reserve: int | None = None
         self_consumption_reserve: int | None = None
         emergency_backup_reserve: int | None = None
 
-        for item in result.get("list", []):
-            work_mode = item.get("workMode")
-            this_mode_key = WORK_MODE_MAP.get(work_mode)
-            if this_mode_key is None:
-                continue
+        try:
+            result = await self.get_gateway_tou_list()
+            current_mode_id_raw = result.get("currendId")
+            current_mode_id = (
+                int(current_mode_id_raw)
+                if current_mode_id_raw is not None
+                else None
+            )
 
-            soc = self._round_int(item.get("soc"))
-            if this_mode_key == MODE_TIME_OF_USE:
-                time_of_use_reserve = soc
-            elif this_mode_key == MODE_SELF_CONSUMPTION:
-                self_consumption_reserve = soc
-            elif this_mode_key == MODE_EMERGENCY_BACKUP:
-                emergency_backup_reserve = soc
+            for item in result.get("list", []):
+                work_mode = item.get("workMode")
+                this_mode_key = WORK_MODE_MAP.get(work_mode)
+                if this_mode_key is None:
+                    continue
 
-            if item.get("id") == current_mode_id:
-                mode_key = this_mode_key
-                mode_name = MODE_LABELS.get(this_mode_key, item.get("name"))
+                soc = self._round_int(item.get("soc"))
+                if this_mode_key == MODE_TIME_OF_USE:
+                    time_of_use_reserve = soc
+                elif this_mode_key == MODE_SELF_CONSUMPTION:
+                    self_consumption_reserve = soc
+                elif this_mode_key == MODE_EMERGENCY_BACKUP:
+                    emergency_backup_reserve = soc
+
+                if item.get("id") == current_mode_id:
+                    mode_key = this_mode_key
+                    mode_name = MODE_LABELS.get(this_mode_key, item.get("name"))
+        except Exception as err:
+            self.logger.debug("Falling back from TOU list mode parsing: %s", err)
+
+        # Fallback path when TOU list data is unavailable or incomplete.
+        if (
+            mode_key is None
+            or time_of_use_reserve is None
+            or self_consumption_reserve is None
+            or emergency_backup_reserve is None
+        ):
+            sw_status, composite = await asyncio.gather(
+                self._switch_status(),
+                self.get_composite_info(),
+                return_exceptions=True,
+            )
+
+            sw_data: dict = {}
+            if not isinstance(sw_status, Exception):
+                sw_data = sw_status
+                if time_of_use_reserve is None:
+                    time_of_use_reserve = self._round_int(sw_data.get("touMinSoc"))
+                if self_consumption_reserve is None:
+                    self_consumption_reserve = self._round_int(sw_data.get("selfMinSoc"))
+                if emergency_backup_reserve is None:
+                    emergency_backup_reserve = self._round_int(sw_data.get("backupMaxSoc"))
+                if current_mode_id is None and sw_data.get("runingMode") is not None:
+                    try:
+                        current_mode_id = int(sw_data["runingMode"])
+                    except (TypeError, ValueError):
+                        pass
+
+            if mode_key is None and not isinstance(composite, Exception):
+                runtime = composite.get("runtimeData", {})
+                current_work_mode = composite.get("currentWorkMode")
+                if current_work_mode is not None:
+                    try:
+                        mode_key = WORK_MODE_MAP.get(int(current_work_mode))
+                    except (TypeError, ValueError):
+                        pass
+                if mode_key is None:
+                    mode_key = self._mode_key_from_name(runtime.get("name"))
+
+            if mode_key is None and sw_data.get("runingMode") is not None:
+                try:
+                    mode_key = MODE_MAP.get(int(sw_data["runingMode"]))
+                except (TypeError, ValueError):
+                    mode_key = None
+
+            if mode_key is None and sw_data.get("name"):
+                mode_key = self._mode_key_from_name(sw_data.get("name"))
 
         if mode_key is None and current_mode_id is not None:
-            mode_key = MODE_MAP.get(int(current_mode_id))
+            mode_key = MODE_MAP.get(current_mode_id)
         if mode_name is None and mode_key is not None:
             mode_name = MODE_LABELS.get(mode_key)
 
@@ -958,6 +1011,20 @@ class Client(HttpClientFactory):
             self_consumption_reserve=self_consumption_reserve,
             emergency_backup_reserve=emergency_backup_reserve,
         )
+
+    @staticmethod
+    def _mode_key_from_name(name: str | None) -> str | None:
+        """Best-effort map from runtime mode label to internal mode key."""
+        if not name:
+            return None
+        lowered = name.lower()
+        if "time" in lowered and "use" in lowered:
+            return MODE_TIME_OF_USE
+        if "self" in lowered:
+            return MODE_SELF_CONSUMPTION
+        if "backup" in lowered:
+            return MODE_EMERGENCY_BACKUP
+        return None
 
     async def get_device_overall_info(self) -> SystemOverview:
         """Get overall system values (battery count and total storage capacity)."""
@@ -983,7 +1050,11 @@ class Client(HttpClientFactory):
     async def get_benefit_info(self) -> BenefitInfo:
         """Get daily savings information used by the app home card."""
         url = self.url_base + "hes-gateway/terminal/bill/electric/selectBenefitInfo"
-        result = (await self._get(url))["result"]
+        try:
+            result = (await self._get(url))["result"]
+        except Exception as err:
+            self.logger.debug("Falling back to zero savings: %s", err)
+            return BenefitInfo(savings_today=0.0, currency=None)
 
         savings_keys = (
             "batFeedEarnList",
@@ -1001,7 +1072,7 @@ class Client(HttpClientFactory):
                 savings_today += float(values[-1] or 0)
 
         return BenefitInfo(
-            savings_today=savings_today if has_value else None,
+            savings_today=savings_today if has_value else 0.0,
             currency=result.get("currency"),
         )
 
