@@ -15,9 +15,17 @@ from .franklinwh.client import (
     Stats,
     SystemOverview,
     MODE_EMERGENCY_BACKUP,
+    MODE_LABELS,
     MODE_SELF_CONSUMPTION,
     MODE_TIME_OF_USE,
 )
+
+MODE_STRING_TO_KEY = {
+    "self_use": MODE_SELF_CONSUMPTION,
+    "backup": MODE_EMERGENCY_BACKUP,
+    "clean_backup": MODE_EMERGENCY_BACKUP,
+    "time_of_use": MODE_TIME_OF_USE,
+}
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -344,6 +352,31 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
 
             # Set the mode via API (async method in franklinwh 1.0.0+)
             await self.client.set_mode(mode_obj)
+
+            # Optimistically update local data so UI reflects change immediately
+            if self.data and self.data.mode_status:
+                new_mode_key = MODE_STRING_TO_KEY.get(mode)
+                if new_mode_key:
+                    existing = self.data.mode_status
+                    updated_status = ModeStatus(
+                        mode_key=new_mode_key,
+                        mode_name=MODE_LABELS.get(new_mode_key),
+                        current_mode_id=existing.current_mode_id,
+                        time_of_use_reserve=existing.time_of_use_reserve,
+                        self_consumption_reserve=existing.self_consumption_reserve,
+                        emergency_backup_reserve=existing.emergency_backup_reserve,
+                    )
+                    self.async_set_updated_data(
+                        FranklinWHData(
+                            stats=self.data.stats,
+                            switch_state=self.data.switch_state,
+                            apowers_info=self.data.apowers_info,
+                            mode_status=updated_status,
+                            system_overview=self.data.system_overview,
+                            benefit_info=self.data.benefit_info,
+                            charge_power_details=self.data.charge_power_details,
+                        )
+                    )
 
             # Request immediate refresh
             await self.async_request_refresh()
