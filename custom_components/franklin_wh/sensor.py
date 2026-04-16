@@ -30,6 +30,7 @@ from .const import CONF_GATEWAY_ID, DOMAIN, MANUFACTURER, MODEL
 from .coordinator import FranklinWHCoordinator, FranklinWHData
 from .franklinwh.client import (
     ApowerInfo,
+    GridStatus,
     MODE_EMERGENCY_BACKUP,
     MODE_SELF_CONSUMPTION,
     MODE_TIME_OF_USE,
@@ -49,6 +50,20 @@ class FranklinWHSensorEntityDescription(SensorEntityDescription):
 APOWER_STATUS_MAP = {
     0: "Normal",
 }
+
+
+GRID_STATUS_LABELS = {
+    GridStatus.NORMAL: "Normal",
+    GridStatus.DOWN: "Down",
+    GridStatus.OFF: "Off",
+}
+
+
+def _grid_status_label(data: FranklinWHData) -> str | None:
+    """Return the current grid connection status as a label."""
+    if data.stats is None or data.stats.current is None:
+        return None
+    return GRID_STATUS_LABELS.get(data.stats.current.grid_status)
 
 
 def _format_backup_time(minutes: int | None) -> str | None:
@@ -96,6 +111,13 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         options=["Time of Use (TOU)", "Self-Consumption", "Emergency Backup"],
         value_fn=lambda data: _mode_label_from_data(data),
+    ),
+    FranklinWHSensorEntityDescription(
+        key="grid_status",
+        name="Grid Status",
+        device_class=SensorDeviceClass.ENUM,
+        options=["Normal", "Down", "Off"],
+        value_fn=_grid_status_label,
     ),
     FranklinWHSensorEntityDescription(
         key="backup_reserve",
