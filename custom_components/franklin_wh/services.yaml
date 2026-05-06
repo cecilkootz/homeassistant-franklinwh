@@ -29,7 +29,7 @@ set_battery_reserve:
       name: Reserve Percentage
       description: Minimum battery charge to maintain (0-100%).
       required: true
-      example: 20
+      example: 30
       selector:
         number:
           min: 0

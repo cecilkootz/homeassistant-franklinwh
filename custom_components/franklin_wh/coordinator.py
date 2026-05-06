@@ -333,7 +333,7 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
             if mode not in mode_map:
                 raise ValueError(f"Invalid mode: {mode}")
 
-            reserve = 20
+            reserve = 30
             if mode in ("backup", "clean_backup"):
                 reserve = 100
 
