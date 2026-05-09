@@ -22,7 +22,9 @@ from .franklinwh.client import (
 
 MODE_STRING_TO_KEY = {
     "self_use": MODE_SELF_CONSUMPTION,
+    "self_consumption": MODE_SELF_CONSUMPTION,
     "backup": MODE_EMERGENCY_BACKUP,
+    "emergency_backup": MODE_EMERGENCY_BACKUP,
     "clean_backup": MODE_EMERGENCY_BACKUP,
     "time_of_use": MODE_TIME_OF_USE,
 }
@@ -385,6 +387,63 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
             _LOGGER.error("Failed to set operation mode to %s: %s", mode, err)
             raise
 
+    def _set_updated_mode_status(self, mode_status: ModeStatus) -> None:
+        """Update coordinator data with a new mode status."""
+        if not self.data:
+            return
+
+        self.async_set_updated_data(
+            FranklinWHData(
+                stats=self.data.stats,
+                switch_state=self.data.switch_state,
+                apowers_info=self.data.apowers_info,
+                mode_status=mode_status,
+                system_overview=self.data.system_overview,
+                benefit_info=self.data.benefit_info,
+                charge_power_details=self.data.charge_power_details,
+            )
+        )
+
+    def _set_updated_mode_reserve(self, mode: str, reserve_percent: int) -> None:
+        """Update the cached reserve value for a mode."""
+        if not self.data:
+            return
+
+        mode_key = MODE_STRING_TO_KEY.get(mode)
+        if mode_key is None:
+            return
+
+        existing = self.data.mode_status
+        time_of_use_reserve = (
+            existing.time_of_use_reserve if existing is not None else None
+        )
+        self_consumption_reserve = (
+            existing.self_consumption_reserve if existing is not None else None
+        )
+        emergency_backup_reserve = (
+            existing.emergency_backup_reserve if existing is not None else None
+        )
+
+        if mode_key == MODE_TIME_OF_USE:
+            time_of_use_reserve = reserve_percent
+        elif mode_key == MODE_SELF_CONSUMPTION:
+            self_consumption_reserve = reserve_percent
+        elif mode_key == MODE_EMERGENCY_BACKUP:
+            emergency_backup_reserve = reserve_percent
+
+        self._set_updated_mode_status(
+            ModeStatus(
+                mode_key=existing.mode_key if existing is not None else None,
+                mode_name=existing.mode_name if existing is not None else None,
+                current_mode_id=(
+                    existing.current_mode_id if existing is not None else None
+                ),
+                time_of_use_reserve=time_of_use_reserve,
+                self_consumption_reserve=self_consumption_reserve,
+                emergency_backup_reserve=emergency_backup_reserve,
+            )
+        )
+
     async def async_set_mode_reserve(self, mode: str, reserve_percent: int) -> None:
         """Set reserve percentage for a specific mode."""
         mode_map = {
@@ -401,6 +460,7 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
 
         mode_obj = mode_map[mode](soc=reserve_percent)
         await self.client.set_mode(mode_obj)
+        self._set_updated_mode_reserve(mode, reserve_percent)
         await self.async_request_refresh()
         _LOGGER.info(
             "Successfully set reserve for mode %s to %d%%",

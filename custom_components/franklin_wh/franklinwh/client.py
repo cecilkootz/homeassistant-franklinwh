@@ -734,8 +734,12 @@ class Client(HttpClientFactory):
         try:
             tou_data = await self.get_gateway_tou_list()
             for item in tou_data.get("list", []):
-                if item.get("workMode") == mode.workMode:
-                    payload["currendId"] = str(item["id"])
+                if not isinstance(item, dict):
+                    continue
+                if self._to_int(item.get("workMode")) == mode.workMode:
+                    mode_id = self._to_int(item.get("id"))
+                    if mode_id is not None:
+                        payload["currendId"] = str(mode_id)
                     if "oldIndex" in item:
                         payload["oldIndex"] = str(item["oldIndex"])
                     break
@@ -854,11 +858,24 @@ class Client(HttpClientFactory):
         return first, second
 
     @staticmethod
-    def _round_int(value: float | int | None) -> int | None:
+    def _round_int(value: float | int | str | None) -> int | None:
         """Round a numeric value to int, preserving None."""
         if value is None:
             return None
         return int(round(float(value)))
+
+    @staticmethod
+    def _to_int(value: float | int | str | None) -> int | None:
+        """Convert API numeric values that may arrive as strings."""
+        if value is None or value == "":
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            try:
+                return int(float(value))
+            except (TypeError, ValueError):
+                return None
 
     @staticmethod
     def _parse_duration_to_minutes(value: str | None) -> int | None:
@@ -962,15 +979,12 @@ class Client(HttpClientFactory):
 
         try:
             result = await self.get_gateway_tou_list()
-            current_mode_id_raw = result.get("currendId")
-            current_mode_id = (
-                int(current_mode_id_raw)
-                if current_mode_id_raw is not None
-                else None
-            )
+            current_mode_id = self._to_int(result.get("currendId"))
 
             for item in result.get("list", []):
-                work_mode = item.get("workMode")
+                if not isinstance(item, dict):
+                    continue
+                work_mode = self._to_int(item.get("workMode"))
                 this_mode_key = WORK_MODE_MAP.get(work_mode)
                 if this_mode_key is None:
                     continue
@@ -983,7 +997,7 @@ class Client(HttpClientFactory):
                 elif this_mode_key == MODE_EMERGENCY_BACKUP:
                     emergency_backup_reserve = soc
 
-                if item.get("id") == current_mode_id:
+                if self._to_int(item.get("id")) == current_mode_id:
                     mode_key = this_mode_key
                     mode_name = MODE_LABELS.get(this_mode_key, item.get("name"))
         except Exception as err:
@@ -1012,27 +1026,19 @@ class Client(HttpClientFactory):
                 if emergency_backup_reserve is None:
                     emergency_backup_reserve = self._round_int(sw_data.get("backupMaxSoc"))
                 if current_mode_id is None and sw_data.get("runingMode") is not None:
-                    try:
-                        current_mode_id = int(sw_data["runingMode"])
-                    except (TypeError, ValueError):
-                        pass
+                    current_mode_id = self._to_int(sw_data.get("runingMode"))
 
             if mode_key is None and not isinstance(composite, Exception):
                 runtime = composite.get("runtimeData", {})
-                current_work_mode = composite.get("currentWorkMode")
+                current_work_mode = self._to_int(composite.get("currentWorkMode"))
                 if current_work_mode is not None:
-                    try:
-                        mode_key = WORK_MODE_MAP.get(int(current_work_mode))
-                    except (TypeError, ValueError):
-                        pass
+                    mode_key = WORK_MODE_MAP.get(current_work_mode)
                 if mode_key is None:
                     mode_key = self._mode_key_from_name(runtime.get("name"))
 
             if mode_key is None and sw_data.get("runingMode") is not None:
-                try:
-                    mode_key = MODE_MAP.get(int(sw_data["runingMode"]))
-                except (TypeError, ValueError):
-                    mode_key = None
+                running_mode = self._to_int(sw_data.get("runingMode"))
+                mode_key = MODE_MAP.get(running_mode) or WORK_MODE_MAP.get(running_mode)
 
             if mode_key is None and sw_data.get("name"):
                 mode_key = self._mode_key_from_name(sw_data.get("name"))
