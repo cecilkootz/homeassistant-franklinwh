@@ -135,6 +135,22 @@ async def main() -> None:
         async def _post_form(self, url: str, payload: dict[str, Any]) -> None:
             self.posts.append((url, payload))
 
+    class GatewayListClient(client.Client):
+        def __init__(self) -> None:
+            self.url_base = client.DEFAULT_URL_BASE
+            self.posts: list[tuple[str, Any, dict[str, Any] | None]] = []
+
+        async def _post(
+            self, url: str, payload: Any, params: dict[str, Any] | None = None
+        ) -> dict[str, Any]:
+            self.posts.append((url, payload, params))
+            return {"result": {"list": []}}
+
+    gateway_list = GatewayListClient()
+    await gateway_list.get_gateway_tou_list()
+    assert gateway_list.posts[-1][1] is None
+    assert gateway_list.posts[-1][2] == {"showType": 1}
+
     fake = FakeClient()
     fake.tou_data = {
         "currendId": "2202",
@@ -150,6 +166,19 @@ async def main() -> None:
     assert status.time_of_use_reserve == 11
     assert status.self_consumption_reserve == 35
     assert status.emergency_backup_reserve == 98
+
+    fake.tou_data = {
+        "currendId": "2202",
+        "list": [
+            {"id": "1101", "workMode": "1", "details": {"reserveSoc": "30"}},
+            {"id": "2202", "workMode": "2", "minSoc": "30"},
+            {"id": "3303", "workMode": "3", "maxSoc": "100"},
+        ],
+    }
+    status = await fake.get_mode_status()
+    assert status.time_of_use_reserve == 30
+    assert status.self_consumption_reserve == 30
+    assert status.emergency_backup_reserve == 100
 
     fake.tou_data = {
         "currendId": None,

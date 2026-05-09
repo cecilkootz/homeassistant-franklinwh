@@ -958,7 +958,7 @@ class Client(HttpClientFactory):
     async def get_gateway_tou_list(self) -> dict:
         """Get mode configuration list, including active mode and reserve SOC values."""
         url = self.url_base + "hes-gateway/terminal/tou/getGatewayTouListV2"
-        return (await self._get(url))["result"]
+        return (await self._post(url, None, {"showType": 1}))["result"]
 
     async def get_mode_status(self) -> ModeStatus:
         """Get current mode and reserve settings."""
@@ -981,7 +981,7 @@ class Client(HttpClientFactory):
                 if this_mode_key is None:
                     continue
 
-                soc = self._round_int(item.get("soc"))
+                soc = self._reserve_soc_from_tou_item(item, this_mode_key)
                 if this_mode_key == MODE_TIME_OF_USE:
                     time_of_use_reserve = soc
                 elif this_mode_key == MODE_SELF_CONSUMPTION:
@@ -1052,6 +1052,51 @@ class Client(HttpClientFactory):
         if "backup" in lowered:
             return MODE_EMERGENCY_BACKUP
         return None
+
+    @classmethod
+    def _reserve_soc_from_tou_item(
+        cls, item: dict, mode_key: str
+    ) -> int | None:
+        """Return reserve SOC from known TOU-list API field shapes."""
+        for key in (
+            "soc",
+            "reserveSoc",
+            "reserveSOC",
+            "reserve_soc",
+            "minSoc" if mode_key != MODE_EMERGENCY_BACKUP else "maxSoc",
+            "minSOC" if mode_key != MODE_EMERGENCY_BACKUP else "maxSOC",
+        ):
+            value = cls._find_numeric_value(item, key)
+            if value is not None:
+                return cls._round_int(value)
+        return None
+
+    @classmethod
+    def _find_numeric_value(cls, value: object, key: str) -> float | int | str | None:
+        """Find a numeric API value by key in nested dict/list structures."""
+        if isinstance(value, dict):
+            if key in value and cls._to_float(value[key]) is not None:
+                return value[key]
+            for child in value.values():
+                found = cls._find_numeric_value(child, key)
+                if found is not None:
+                    return found
+        elif isinstance(value, list):
+            for child in value:
+                found = cls._find_numeric_value(child, key)
+                if found is not None:
+                    return found
+        return None
+
+    @staticmethod
+    def _to_float(value: object) -> float | None:
+        """Convert API numeric values that may arrive as strings."""
+        if value is None or value == "":
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     async def get_device_overall_info(self) -> SystemOverview:
         """Get overall system values (battery count and total storage capacity)."""
