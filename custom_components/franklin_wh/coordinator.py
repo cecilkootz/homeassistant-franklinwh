@@ -179,7 +179,6 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
             )
             if isinstance(mode_status_res, Exception):
                 _LOGGER.debug("Failed to fetch mode status: %s", mode_status_res)
-                mode_status = self.data.mode_status if self.data else None
             elif mode_status and self.data and self.data.mode_status:
                 prev_mode = self.data.mode_status
                 mode_status.mode_key = mode_status.mode_key or prev_mode.mode_key
@@ -188,21 +187,6 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                     mode_status.current_mode_id
                     if mode_status.current_mode_id is not None
                     else prev_mode.current_mode_id
-                )
-                mode_status.time_of_use_reserve = (
-                    mode_status.time_of_use_reserve
-                    if mode_status.time_of_use_reserve is not None
-                    else prev_mode.time_of_use_reserve
-                )
-                mode_status.self_consumption_reserve = (
-                    mode_status.self_consumption_reserve
-                    if mode_status.self_consumption_reserve is not None
-                    else prev_mode.self_consumption_reserve
-                )
-                mode_status.emergency_backup_reserve = (
-                    mode_status.emergency_backup_reserve
-                    if mode_status.emergency_backup_reserve is not None
-                    else prev_mode.emergency_backup_reserve
                 )
 
             system_overview = (
@@ -335,20 +319,25 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
             if mode not in mode_map:
                 raise ValueError(f"Invalid mode: {mode}")
 
-            reserve = 30
-            if mode in ("backup", "clean_backup"):
-                reserve = 100
-
             try:
                 mode_status = await self.client.get_mode_status()
-                if mode == "self_use" and mode_status.self_consumption_reserve is not None:
-                    reserve = mode_status.self_consumption_reserve
-                elif mode == "time_of_use" and mode_status.time_of_use_reserve is not None:
-                    reserve = mode_status.time_of_use_reserve
-                elif mode in ("backup", "clean_backup") and mode_status.emergency_backup_reserve is not None:
-                    reserve = mode_status.emergency_backup_reserve
             except Exception as err:
-                _LOGGER.debug("Could not fetch mode reserves before switching: %s", err)
+                raise RuntimeError(
+                    "Unable to fetch API reserve values before switching modes"
+                ) from err
+
+            reserve = None
+            if mode == "self_use":
+                reserve = mode_status.self_consumption_reserve
+            elif mode == "time_of_use":
+                reserve = mode_status.time_of_use_reserve
+            elif mode in ("backup", "clean_backup"):
+                reserve = mode_status.emergency_backup_reserve
+
+            if reserve is None:
+                raise RuntimeError(
+                    f"Unable to determine API reserve value for mode {mode}"
+                )
 
             mode_obj = mode_map[mode](soc=reserve)
 
@@ -472,24 +461,27 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
         """Set the battery reserve percentage.
 
         This attempts to preserve the current operation mode while updating
-        the battery reserve (SOC) percentage. If the current mode cannot be
-        determined, it defaults to self_consumption mode.
+        the battery reserve (SOC) percentage.
         """
         try:
-            # Try to get the current mode to preserve it (async method in franklinwh 1.0.0+)
             try:
                 current_mode = await self.client.get_mode()
                 _LOGGER.debug("Current mode retrieved: %s", current_mode)
             except Exception as err:
-                _LOGGER.warning("Could not retrieve current mode, defaulting to self_consumption: %s", err)
-                current_mode = None
+                raise RuntimeError(
+                    "Unable to fetch API mode and reserve before setting reserve"
+                ) from err
 
-            current_mode_key = current_mode[0] if current_mode else MODE_SELF_CONSUMPTION
+            current_mode_key = current_mode[0]
             mode_factory = {
                 MODE_TIME_OF_USE: Mode.time_of_use,
                 MODE_SELF_CONSUMPTION: Mode.self_consumption,
                 MODE_EMERGENCY_BACKUP: Mode.emergency_backup,
-            }.get(current_mode_key, Mode.self_consumption)
+            }.get(current_mode_key)
+            if mode_factory is None:
+                raise RuntimeError(
+                    f"Unable to determine API mode for reserve update: {current_mode_key}"
+                )
 
             mode_obj = mode_factory(soc=reserve_percent)
 

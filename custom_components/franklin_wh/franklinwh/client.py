@@ -293,24 +293,24 @@ class Mode:
 
     Methods:
     -------
-    time_of_use(soc=20)
+    time_of_use(soc)
         Create a time of use mode instance.
-    emergency_backup(soc=100)
+    emergency_backup(soc)
         Create an emergency backup mode instance.
-    self_consumption(soc=20)
+    self_consumption(soc)
         Create a self consumption mode instance.
     payload(gateway)
         Generate the payload dictionary for API requests.
     """
 
     @staticmethod
-    def time_of_use(soc=20):
+    def time_of_use(soc: int):
         """Create a time of use mode instance.
 
         Parameters
         ----------
-        soc : int, optional
-            The state of charge value for the mode, defaults to 20.
+        soc : int
+            The state of charge value for the mode.
 
         Returns:
         -------
@@ -323,13 +323,13 @@ class Mode:
         return mode
 
     @staticmethod
-    def emergency_backup(soc=100):
+    def emergency_backup(soc: int):
         """Create an emergency backup mode instance.
 
         Parameters
         ----------
-        soc : int, optional
-            The state of charge value for the mode, defaults to 100.
+        soc : int
+            The state of charge value for the mode.
 
         Returns:
         -------
@@ -342,13 +342,13 @@ class Mode:
         return mode
 
     @staticmethod
-    def self_consumption(soc=20):
+    def self_consumption(soc: int):
         """Create a self consumption mode instance.
 
         Parameters
         ----------
-        soc : int, optional
-            The state of charge value for the mode, defaults to 20.
+        soc : int
+            The state of charge value for the mode.
 
         Returns:
         -------
@@ -720,14 +720,6 @@ class Client(HttpClientFactory):
 
     async def set_mode(self, mode):
         """Set the operating mode of the FranklinWH gateway."""
-        # Time of use:
-        # currendId=9322&gatewayId=___&lang=EN_US&oldIndex=3&soc=15&stromEn=1&workMode=1
-
-        # Emergency Backup:
-        # currendId=9324&gatewayId=___&lang=EN_US&oldIndex=1&soc=100&stromEn=1&workMode=3
-
-        # Self consumption
-        # currendId=9323&gatewayId=___&lang=EN_US&oldIndex=2&soc=20&stromEn=1&workMode=2
         url = DEFAULT_URL_BASE + "hes-gateway/terminal/tou/updateTouMode"
         payload = mode.payload(self.gateway)
         # The cloud API now uses per-site mode IDs. Resolve current IDs from TOU list.
@@ -1003,13 +995,9 @@ class Client(HttpClientFactory):
         except Exception as err:
             self.logger.debug("Falling back from TOU list mode parsing: %s", err)
 
-        # Fallback path when TOU list data is unavailable or incomplete.
-        if (
-            mode_key is None
-            or time_of_use_reserve is None
-            or self_consumption_reserve is None
-            or emergency_backup_reserve is None
-        ):
+        # Fallback path for active mode only. Reserve values must come from
+        # getGatewayTouListV2; older switch status fields can contain defaults.
+        if mode_key is None:
             sw_status, composite = await asyncio.gather(
                 self._switch_status(),
                 self.get_composite_info(),
@@ -1019,12 +1007,6 @@ class Client(HttpClientFactory):
             sw_data: dict = {}
             if not isinstance(sw_status, Exception):
                 sw_data = sw_status
-                if time_of_use_reserve is None:
-                    time_of_use_reserve = self._round_int(sw_data.get("touMinSoc"))
-                if self_consumption_reserve is None:
-                    self_consumption_reserve = self._round_int(sw_data.get("selfMinSoc"))
-                if emergency_backup_reserve is None:
-                    emergency_backup_reserve = self._round_int(sw_data.get("backupMaxSoc"))
                 if current_mode_id is None and sw_data.get("runingMode") is not None:
                     current_mode_id = self._to_int(sw_data.get("runingMode"))
 

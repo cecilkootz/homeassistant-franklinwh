@@ -106,6 +106,7 @@ def load_coordinator_module(client: types.ModuleType) -> types.ModuleType:
 
 
 async def main() -> None:
+    logging.disable(logging.CRITICAL)
     client = load_client_module()
 
     class FakeClient(client.Client):
@@ -164,8 +165,8 @@ async def main() -> None:
     status = await fake.get_mode_status()
     assert status.mode_key == client.MODE_EMERGENCY_BACKUP
     assert status.time_of_use_reserve == 12
-    assert status.self_consumption_reserve == 28
-    assert status.emergency_backup_reserve == 97
+    assert status.self_consumption_reserve is None
+    assert status.emergency_backup_reserve is None
 
     fake.tou_data = {"list": [{"id": "4567", "workMode": "1", "oldIndex": 8}]}
     await fake.set_mode(client.Mode.time_of_use(soc=44))
@@ -191,6 +192,38 @@ async def main() -> None:
     assert coord.data.mode_status.time_of_use_reserve == 46
     assert coord.data.mode_status.self_consumption_reserve == 28
     assert coord.data.mode_status.emergency_backup_reserve == 97
+
+    class ReserveClient:
+        def __init__(self) -> None:
+            self.set_modes: list[Any] = []
+
+        async def get_mode_status(self) -> Any:
+            return client.ModeStatus(
+                mode_key=client.MODE_SELF_CONSUMPTION,
+                mode_name="Self-Consumption",
+                current_mode_id=2202,
+                time_of_use_reserve=None,
+                self_consumption_reserve=None,
+                emergency_backup_reserve=None,
+            )
+
+        async def set_mode(self, mode: Any) -> None:
+            self.set_modes.append(mode)
+
+    reserve_client = ReserveClient()
+    coord.client = reserve_client
+
+    async def refresh() -> None:
+        raise AssertionError("refresh should not run without API reserve values")
+
+    coord.async_request_refresh = refresh
+    try:
+        await coord.async_set_operation_mode("self_use")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("mode change should fail without API reserve values")
+    assert reserve_client.set_modes == []
 
 
 if __name__ == "__main__":
