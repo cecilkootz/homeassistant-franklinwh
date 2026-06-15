@@ -58,19 +58,6 @@ RESERVE_NUMBERS: tuple[FranklinWHReserveNumberDescription, ...] = (
             data.mode_status.self_consumption_reserve if data.mode_status else None
         ),
     ),
-    FranklinWHReserveNumberDescription(
-        key="emergency_backup_reserve",
-        name="Emergency Backup Reserve",
-        service_mode="backup",
-        native_min_value=0,
-        native_max_value=100,
-        native_step=1,
-        native_unit_of_measurement=PERCENTAGE,
-        mode=NumberMode.BOX,
-        value_fn=lambda data: (
-            data.mode_status.emergency_backup_reserve if data.mode_status else None
-        ),
-    ),
 )
 
 

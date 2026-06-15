@@ -145,15 +145,6 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         ),
     ),
     FranklinWHSensorEntityDescription(
-        key="emergency_backup_reserve",
-        name="Emergency Backup Reserve",
-        native_unit_of_measurement=PERCENTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: (
-            data.mode_status.emergency_backup_reserve if data.mode_status else None
-        ),
-    ),
-    FranklinWHSensorEntityDescription(
         key="total_storage_capacity",
         name="Total Storage Capacity",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,

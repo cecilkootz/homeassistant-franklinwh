@@ -11,6 +11,8 @@ from .franklinwh.client import (
     ApowerInfo,
     BenefitInfo,
     ChargePowerDetails,
+    DeviceTimeoutException,
+    GatewayOfflineException,
     ModeStatus,
     Stats,
     SystemOverview,
@@ -19,6 +21,11 @@ from .franklinwh.client import (
     MODE_SELF_CONSUMPTION,
     MODE_TIME_OF_USE,
 )
+
+# Errors that represent a temporarily slow/unreachable gateway rather than a
+# real fault. These are common and self-recover, so they are retried inline and
+# logged quietly instead of as warnings.
+TRANSIENT_ERRORS = (DeviceTimeoutException, GatewayOfflineException)
 
 MODE_STRING_TO_KEY = {
     "self_use": MODE_SELF_CONSUMPTION,
@@ -102,6 +109,12 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
         self._consecutive_failures = 0
         self._max_failures = 3
 
+        # Inline retries for the primary stats fetch when the gateway reports a
+        # transient timeout. Kept short so the whole update stays well within
+        # the scan interval.
+        self._stats_retries = 2
+        self._stats_retry_delay = 3.0
+
     async def _async_update_data(self) -> FranklinWHData:
         """Fetch data from FranklinWH API."""
         try:
@@ -120,7 +133,7 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                     raise UpdateFailed(f"Failed to initialize client: {err}") from err
 
             # Fetch stats (async method in franklinwh 1.0.0+)
-            stats = await self.client.get_stats()
+            stats = await self._get_stats_with_retry()
 
             if stats is None:
                 raise UpdateFailed("Failed to fetch stats from FranklinWH API")
@@ -240,56 +253,75 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                 charge_power_details=charge_power_details,
             )
 
-        except AttributeError as err:
-            # Handle case where AuthenticationError doesn't exist in franklinwh
-            if "AuthenticationError" in str(type(err)):
-                raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
-
-            # Increment failure counter
-            self._consecutive_failures += 1
-            _LOGGER.warning(
-                "API error (attempt %d/%d): %s",
-                self._consecutive_failures,
-                self._max_failures,
-                err
-            )
-
-            # Only raise UpdateFailed after max failures
-            # This keeps entities available with last known data
-            if self._consecutive_failures >= self._max_failures:
-                _LOGGER.error("Max consecutive failures reached, marking unavailable")
-                raise UpdateFailed(f"Error communicating with API: {err}") from err
-
-            # Return last known data to keep entities available
-            if self.data:
-                _LOGGER.debug("Returning last known data due to temporary failure")
-                return self.data
-            raise UpdateFailed(f"Error communicating with API: {err}") from err
-
         except Exception as err:
-            # Check if it's an authentication-related error
-            if "auth" in str(err).lower() or "token" in str(err).lower():
+            # Authentication failures should trigger reauth, not retries.
+            err_text = str(err).lower()
+            type_name = type(err).__name__
+            if (
+                "auth" in err_text
+                or "token" in err_text
+                or "AuthenticationError" in type_name
+                or "InvalidCredentials" in type_name
+            ):
                 raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
 
-            # Increment failure counter
-            self._consecutive_failures += 1
-            _LOGGER.warning(
-                "API error (attempt %d/%d): %s",
+            return self._handle_update_failure(err)
+
+    async def _get_stats_with_retry(self) -> Stats | None:
+        """Fetch stats, retrying transient gateway timeouts inline.
+
+        A single slow response from the gateway is common and usually succeeds
+        on a quick retry, so it is handled here instead of counting against the
+        consecutive-failure budget.
+        """
+        last_err: Exception | None = None
+        for attempt in range(self._stats_retries + 1):
+            try:
+                return await self.client.get_stats()
+            except TRANSIENT_ERRORS as err:
+                last_err = err
+                if attempt < self._stats_retries:
+                    _LOGGER.debug(
+                        "Transient gateway error fetching stats (try %d/%d): %s; "
+                        "retrying in %.1fs",
+                        attempt + 1,
+                        self._stats_retries + 1,
+                        err,
+                        self._stats_retry_delay,
+                    )
+                    await asyncio.sleep(self._stats_retry_delay)
+        # Exhausted inline retries; let the caller's failure handling take over.
+        assert last_err is not None
+        raise last_err
+
+    def _handle_update_failure(self, err: Exception) -> FranklinWHData:
+        """Account for a failed update.
+
+        While under the failure threshold (and we have prior data), the last
+        known data is returned to keep entities available. Transient gateway
+        hiccups are logged at debug level to avoid noise; only a sustained
+        outage that actually marks the device unavailable is logged louder.
+        """
+        self._consecutive_failures += 1
+        transient = isinstance(err, TRANSIENT_ERRORS)
+
+        if self._consecutive_failures < self._max_failures and self.data is not None:
+            log = _LOGGER.debug if transient else _LOGGER.warning
+            log(
+                "API error (attempt %d/%d), keeping last known data: %s",
                 self._consecutive_failures,
                 self._max_failures,
-                err
+                err,
             )
+            return self.data
 
-            # Only raise UpdateFailed after max failures
-            if self._consecutive_failures >= self._max_failures:
-                _LOGGER.error("Max consecutive failures reached, marking unavailable")
-                raise UpdateFailed(f"Error communicating with API: {err}") from err
-
-            # Return last known data to keep entities available
-            if self.data:
-                _LOGGER.debug("Returning last known data due to temporary failure")
-                return self.data
-            raise UpdateFailed(f"Error communicating with API: {err}") from err
+        _LOGGER.error(
+            "Error communicating with API after %d/%d attempts, marking unavailable: %s",
+            self._consecutive_failures,
+            self._max_failures,
+            err,
+        )
+        raise UpdateFailed(f"Error communicating with API: {err}") from err
 
     async def async_set_switch_state(self, switches: tuple[bool, bool, bool]) -> None:
         """Set the state of smart switches."""
