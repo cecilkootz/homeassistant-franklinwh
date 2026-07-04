@@ -13,6 +13,7 @@ from homeassistant.components.number import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -123,10 +124,13 @@ class FranklinWHReserveNumber(
             )
         except Exception as err:
             _LOGGER.error(
-                "Failed to set reserve for mode %s to %d%%: %s",
+                "Failed to set reserve for mode %s to %d%%: %r",
                 self.entity_description.service_mode,
                 reserve,
                 err,
             )
-            raise
+            raise HomeAssistantError(
+                f"Failed to set {self.entity_description.service_mode} reserve to "
+                f"{reserve}%: {err!r}"
+            ) from err
 

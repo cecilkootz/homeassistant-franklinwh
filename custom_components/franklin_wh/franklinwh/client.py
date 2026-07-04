@@ -20,6 +20,10 @@ import httpx
 
 from .api import DEFAULT_URL_BASE
 
+# Cloud calls that relay commands to the gateway (e.g. updateTouMode) routinely
+# take longer than httpx's 5s default read timeout.
+CLOUD_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+
 
 class AccessoryType(Enum):
     """Represents the type of accessory connected to the FranklinWH gateway.
@@ -583,7 +587,6 @@ class Client(HttpClientFactory):
             self.session.event_hooks["request"].append(debug_request)
             self.session.event_hooks["response"].append(debug_response)
 
-    # TODO(richo) Setup timeouts and deal with them gracefully.
     async def _post(self, url, payload, params: dict | None = None):
         self.logger.debug("[cloud] POST %s", url)
         if params is not None:
@@ -600,6 +603,7 @@ class Client(HttpClientFactory):
                         "Content-Type": "application/json",
                     },
                     data=payload,
+                    timeout=CLOUD_TIMEOUT,
                 )
             ).json()
 
@@ -617,6 +621,7 @@ class Client(HttpClientFactory):
                         "optsource": "3",
                     },
                     data=payload,
+                    timeout=CLOUD_TIMEOUT,
                 )
             ).json()
 
@@ -633,7 +638,10 @@ class Client(HttpClientFactory):
         async def __get():
             return (
                 await self.session.get(
-                    url, params=params, headers={"loginToken": self.token}
+                    url,
+                    params=params,
+                    headers={"loginToken": self.token},
+                    timeout=CLOUD_TIMEOUT,
                 )
             ).json()
 
