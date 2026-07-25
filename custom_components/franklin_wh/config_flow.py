@@ -4,7 +4,17 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import httpx
+
 from . import franklinwh as franklinwh_lib
+from .franklinwh.client import (
+    AccountLockedException,
+    ApiUnavailableException,
+    DeviceTimeoutException,
+    GatewayOfflineException,
+    InvalidCredentialsException,
+    TokenExpiredException,
+)
 from homeassistant.helpers.httpx_client import get_async_client
 import voluptuous as vol
 
@@ -20,6 +30,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
+from .coordinator import AUTH_STATE_KEY
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,26 +59,27 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
             "title": f"FranklinWH {gateway_id[-6:]}",
             "gateway_id": gateway_id,
         }
+    except InvalidCredentialsException as err:
+        raise InvalidAuth from err
+    except AccountLockedException as err:
+        raise AccountLocked from err
+    except GatewayOfflineException as err:
+        raise InvalidGateway from err
+    except DeviceTimeoutException as err:
+        _LOGGER.error("Device timeout - gateway may be offline or unreachable")
+        raise CannotConnect(
+            "Gateway device timed out. Please verify:\n"
+            "1. Gateway is powered on and connected to network\n"
+            "2. Gateway ID is correct\n"
+            "3. FranklinWH cloud services are online"
+        ) from err
+    except (ApiUnavailableException, TokenExpiredException, httpx.HTTPError) as err:
+        # The cloud is having a bad moment; say so instead of blaming the
+        # credentials and sending the user off to reset a working password.
+        _LOGGER.error("FranklinWH cloud is unreachable or erroring: %s", err)
+        raise CannotConnect from err
     except Exception as err:
         _LOGGER.exception("Unexpected exception: %s", err)
-        error_str = str(err).lower()
-
-        # Check for specific error types
-        if "timeout" in error_str or "timed out" in error_str:
-            _LOGGER.error("Device timeout - gateway may be offline or unreachable")
-            raise CannotConnect(
-                "Gateway device timed out. Please verify:\n"
-                "1. Gateway is powered on and connected to network\n"
-                "2. Gateway ID is correct\n"
-                "3. FranklinWH cloud services are online"
-            ) from err
-
-        if "auth" in error_str or "token" in error_str or "401" in error_str:
-            raise InvalidAuth from err
-
-        if "gateway" in error_str or "device" in error_str:
-            raise InvalidGateway from err
-
         raise CannotConnect from err
 
 
@@ -93,6 +105,8 @@ class FranklinWHConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
+            except AccountLocked:
+                errors["base"] = "account_locked"
             except InvalidGateway:
                 errors["base"] = "invalid_gateway"
             except Exception:  # pylint: disable=broad-except
@@ -138,10 +152,15 @@ class FranklinWHConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
+            except AccountLocked:
+                errors["base"] = "account_locked"
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
+                # Start the failure grace period over so a flaky cloud doesn't
+                # immediately re-prompt with the credentials just confirmed good.
+                self.hass.data.get(AUTH_STATE_KEY, {}).pop(entry.entry_id, None)
                 self.hass.config_entries.async_update_entry(entry, data=data)
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
@@ -201,6 +220,10 @@ class CannotConnect(HomeAssistantError):
 
 class InvalidAuth(HomeAssistantError):
     """Error to indicate there is invalid auth."""
+
+
+class AccountLocked(HomeAssistantError):
+    """Error to indicate the FranklinWH account is temporarily locked."""
 
 
 class InvalidGateway(HomeAssistantError):

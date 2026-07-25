@@ -24,6 +24,17 @@ from .api import DEFAULT_URL_BASE
 # take longer than httpx's 5s default read timeout.
 CLOUD_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
+LOGIN_TIMEOUT = httpx.Timeout(20.0, connect=10.0)
+LOGIN_ATTEMPTS = 3
+LOGIN_RETRY_DELAYS = (2.0, 5.0)
+# A failed login is replayed to callers for this long instead of being retried.
+# Without it, one bad token turns every request in a poll cycle into its own
+# login burst, which the cloud answers with a rate limit or an account lock.
+LOGIN_FAILURE_COOLDOWN = 30.0
+# Rejected credentials get a much longer cooldown: retrying them once a minute
+# is what trips the account lockout that then blocks the real fix.
+CREDENTIAL_COOLDOWN = 300.0
+
 
 class AccessoryType(Enum):
     """Represents the type of accessory connected to the FranklinWH gateway.
@@ -454,6 +465,21 @@ class GatewayOfflineException(Exception):
     """raised when the gateway is offline."""
 
 
+class ApiUnavailableException(Exception):
+    """raised when the cloud returns a response we can't use (5xx, HTML error page, unexpected shape).
+
+    Always transient: it says nothing about whether the credentials are good.
+    """
+
+
+class AuthServiceUnavailableException(ApiUnavailableException):
+    """raised when the login endpoint itself fails.
+
+    Distinct from InvalidCredentialsException: the credentials were never judged,
+    so this must not lead to a reauth prompt.
+    """
+
+
 class HttpClientFactory:
     """Factory to create AsyncClient."""
 
@@ -484,14 +510,73 @@ class TokenFetcher(HttpClientFactory):
         self.password = password
         self.info: dict | None = None
         self._session = session
+        self._token: str | None = None
+        self._lock = asyncio.Lock()
+        self._last_failure: Exception | None = None
+        self._last_failure_at = 0.0
+        self.logger = logging.getLogger("franklinwh")
 
-    async def get_token(self):
-        """Fetch a new authentication token using the stored credentials.
+    async def get_token(self, stale_token: str | None = None) -> str:
+        """Return a usable token, logging in only when one is actually needed.
 
-        Store the intermediate account information in self.info.
+        `stale_token` is the token the caller just had rejected. If another task
+        has already replaced it, the replacement is handed back instead of
+        logging in again, so a single expired token doesn't turn a poll cycle's
+        parallel requests into a burst of logins.
         """
-        self.info = await self.fetch_token()
-        return self.info["token"]
+        async with self._lock:
+            if self._token is not None and self._token != stale_token:
+                return self._token
+            return await self._login()
+
+    async def _login(self) -> str:
+        """Log in, retrying transient failures and caching the outcome."""
+        now = time.monotonic()
+        if self._last_failure is not None:
+            cooldown = (
+                CREDENTIAL_COOLDOWN
+                if isinstance(
+                    self._last_failure,
+                    (InvalidCredentialsException, AccountLockedException),
+                )
+                else LOGIN_FAILURE_COOLDOWN
+            )
+            if now - self._last_failure_at < cooldown:
+                # Raise a copy: re-raising the stored instance on every poll
+                # would keep appending frames to its traceback.
+                raise type(self._last_failure)(*self._last_failure.args)
+
+        try:
+            for attempt in range(LOGIN_ATTEMPTS):
+                try:
+                    self.info = await self.fetch_token()
+                    break
+                except (InvalidCredentialsException, AccountLockedException):
+                    raise
+                except Exception as err:
+                    if attempt == LOGIN_ATTEMPTS - 1:
+                        raise AuthServiceUnavailableException(
+                            f"Login failed after {LOGIN_ATTEMPTS} attempts: {err!r}"
+                        ) from err
+                    delay = LOGIN_RETRY_DELAYS[
+                        min(attempt, len(LOGIN_RETRY_DELAYS) - 1)
+                    ]
+                    self.logger.debug(
+                        "Login attempt %d/%d failed (%s); retrying in %.1fs",
+                        attempt + 1,
+                        LOGIN_ATTEMPTS,
+                        err,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+        except Exception as err:
+            self._last_failure = err
+            self._last_failure_at = time.monotonic()
+            raise
+
+        self._last_failure = None
+        self._token = self.info["token"]
+        return self._token
 
     @staticmethod
     async def login(username: str, password: str):
@@ -510,29 +595,34 @@ class TokenFetcher(HttpClientFactory):
             "type": 1,
         }
         if self._session is not None:
-            res = await self._session.post(url, data=form, timeout=10)
+            res = await self._session.post(url, data=form, timeout=LOGIN_TIMEOUT)
         else:
             async with self.get_client() as client:
-                res = await client.post(url, data=form, timeout=10)
+                res = await client.post(url, data=form, timeout=LOGIN_TIMEOUT)
         res.raise_for_status()
-        js = res.json()
+        try:
+            js = res.json()
+        except ValueError as err:
+            raise ApiUnavailableException(
+                f"Login returned a non-JSON response (HTTP {res.status_code})"
+            ) from err
 
-        if js["code"] == 401:
-            raise InvalidCredentialsException(js["message"])
+        code = js.get("code")
+        if code == 401:
+            raise InvalidCredentialsException(js.get("message") or "Invalid credentials")
 
-        if js["code"] == 400:
-            raise AccountLockedException(js["message"])
+        if code == 400:
+            raise AccountLockedException(js.get("message") or "Account locked")
 
-        return js["result"]
+        result = js.get("result")
+        if not isinstance(result, dict) or not result.get("token"):
+            # A missing token means the cloud is misbehaving, not that the
+            # credentials are wrong; keep it out of the reauth path.
+            raise ApiUnavailableException(
+                f"Login response contained no token (code {code}: {js.get('message')})"
+            )
 
-
-async def retry(func, filter, refresh_func):
-    """Tries calling func, and if filter fails it calls refresh func then tries again."""
-    res = await func()
-    if filter(res):
-        return res
-    await refresh_func()
-    return await func()
+        return result
 
 
 class Client(HttpClientFactory):
@@ -594,7 +684,7 @@ class Client(HttpClientFactory):
             params.update({"gatewayId": self.gateway, "lang": "en_US"})
 
         async def __post():
-            return (
+            return self._json(
                 await self.session.post(
                     url,
                     params=params,
@@ -605,14 +695,14 @@ class Client(HttpClientFactory):
                     data=payload,
                     timeout=CLOUD_TIMEOUT,
                 )
-            ).json()
+            )
 
-        return await retry(__post, lambda j: j["code"] != 401, self.refresh_token)
+        return await self._send(__post)
 
     async def _post_form(self, url, payload):
         self.logger.debug("[cloud] POST (form) %s", url)
         async def __post():
-            return (
+            return self._json(
                 await self.session.post(
                     url,
                     headers={
@@ -623,9 +713,9 @@ class Client(HttpClientFactory):
                     data=payload,
                     timeout=CLOUD_TIMEOUT,
                 )
-            ).json()
+            )
 
-        return await retry(__post, lambda j: j["code"] != 401, self.refresh_token)
+        return await self._send(__post)
 
     async def _get(self, url, params: dict | None = None):
         self.logger.debug("[cloud] GET %s", url)
@@ -636,20 +726,52 @@ class Client(HttpClientFactory):
         params.update({"gatewayId": self.gateway, "lang": "en_US"})
 
         async def __get():
-            return (
+            return self._json(
                 await self.session.get(
                     url,
                     params=params,
                     headers={"loginToken": self.token},
                     timeout=CLOUD_TIMEOUT,
                 )
-            ).json()
+            )
 
-        return await retry(__get, lambda j: j["code"] != 401, self.refresh_token)
+        return await self._send(__get)
 
-    async def refresh_token(self):
+    @staticmethod
+    def _json(res: httpx.Response) -> dict:
+        """Parse an API response, treating undecodable bodies as a cloud outage."""
+        try:
+            js = res.json()
+        except ValueError as err:
+            raise ApiUnavailableException(
+                f"Cloud API returned a non-JSON response (HTTP {res.status_code})"
+            ) from err
+        if not isinstance(js, dict):
+            raise ApiUnavailableException(
+                f"Cloud API returned an unexpected response (HTTP {res.status_code})"
+            )
+        return js
+
+    async def _send(self, do_request):
+        """Run a request, refreshing the token once if the cloud rejects it."""
+        used_token = self.token
+        res = await do_request()
+        if res.get("code") != 401:
+            return res
+
+        await self.refresh_token(stale_token=used_token)
+        res = await do_request()
+        if res.get("code") == 401:
+            # A freshly issued token was rejected, so this is the cloud
+            # misbehaving rather than a credential problem.
+            raise TokenExpiredException(
+                res.get("message") or "Token rejected immediately after refresh"
+            )
+        return res
+
+    async def refresh_token(self, stale_token: str | None = None):
         """Refresh the authentication token using the TokenFetcher."""
-        self.token = await self.fetcher.get_token()
+        self.token = await self.fetcher.get_token(stale_token)
 
     async def get_accessories(self):
         """Get the list of accessories connected to the gateway."""
@@ -934,11 +1056,13 @@ class Client(HttpClientFactory):
         url = DEFAULT_URL_BASE + "hes-gateway/terminal/sendMqtt"
 
         res = await self._post(url, payload)
-        if res["code"] == 102:
-            raise DeviceTimeoutException(res["message"])
-        if res["code"] == 136:
-            raise GatewayOfflineException(res["message"])
-        assert res["code"] == 200, f"{res['code']}: {res['message']}"
+        code = res.get("code")
+        if code == 102:
+            raise DeviceTimeoutException(res.get("message"))
+        if code == 136:
+            raise GatewayOfflineException(res.get("message"))
+        if code != 200:
+            raise ApiUnavailableException(f"{code}: {res.get('message')}")
         return res
 
     async def set_grid_status(self, status: GridStatus, soc: int = 5):

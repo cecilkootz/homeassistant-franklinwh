@@ -21,7 +21,7 @@ from .const import (
     SERVICE_SET_MODE_RESERVE,
     SERVICE_SET_OPERATION_MODE,
 )
-from .coordinator import FranklinWHCoordinator
+from .coordinator import AUTH_STATE_KEY, FranklinWHCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -144,6 +144,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
+        hass.data.get(AUTH_STATE_KEY, {}).pop(entry.entry_id, None)
 
     return unload_ok
 

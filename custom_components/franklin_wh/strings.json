@@ -24,6 +24,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to FranklinWH. Gateway may be offline or unreachable. Please verify: 1) Gateway is powered on, 2) Gateway ID is correct, 3) Network connection is working.",
+      "account_locked": "Your FranklinWH account is temporarily locked, usually after too many sign-in attempts. Wait a few minutes and try again; changing your password is not required.",
       "invalid_auth": "Invalid username or password. Please check your credentials.",
       "invalid_gateway": "Invalid Gateway ID. Please check your Gateway ID in the FranklinWH app under More → Site Address → SN.",
       "timeout": "Gateway device timeout. Please verify the gateway is online and connected to the network.",

@@ -198,11 +198,20 @@ All energy sensors are compatible with Home Assistant's **Energy Dashboard**:
 4. Ensure FranklinWH cloud services are online
 
 ### Authentication errors
-1. Try re-authenticating:
-   - Go to **Settings → Devices & Services**
-   - Find your FranklinWH integration
-   - Click **Configure** → **Re-authenticate**
-2. Verify your password is correct
+A single rejected login is not treated as a credential problem: the FranklinWH
+cloud returns spurious 401s during its own outages, so the integration keeps
+polling and recovers on its own. Re-authentication is only requested after the
+cloud has rejected the credentials repeatedly for at least 15 minutes.
+
+If you are asked to re-authenticate:
+1. Verify your password is correct (try signing in to the FranklinWH app)
+2. Go to **Settings → Devices & Services**
+3. Find your FranklinWH integration
+4. Click **Configure** → **Re-authenticate**
+
+If the form reports that the account is locked, wait a few minutes and try
+again — too many sign-in attempts triggers a temporary lock, and changing your
+password will not clear it.
 
 ### Entities show as "Unavailable"
 1. Check your internet connection

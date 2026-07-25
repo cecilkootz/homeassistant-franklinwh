@@ -5,27 +5,60 @@ from __future__ import annotations
 import asyncio
 from datetime import timedelta
 import logging
+import time
 
+import httpx
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+
+from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 from .franklinwh import Client, TokenFetcher, Mode
 from .franklinwh.client import (
+    AccountLockedException,
+    ApiUnavailableException,
     ApowerInfo,
     BenefitInfo,
     ChargePowerDetails,
     DeviceTimeoutException,
     GatewayOfflineException,
+    InvalidCredentialsException,
     ModeStatus,
     Stats,
     SystemOverview,
+    TokenExpiredException,
     MODE_EMERGENCY_BACKUP,
     MODE_LABELS,
     MODE_SELF_CONSUMPTION,
     MODE_TIME_OF_USE,
 )
 
-# Errors that represent a temporarily slow/unreachable gateway rather than a
-# real fault. These are common and self-recover, so they are retried inline and
-# logged quietly instead of as warnings.
-TRANSIENT_ERRORS = (DeviceTimeoutException, GatewayOfflineException)
+# Errors that represent a temporarily slow/unreachable gateway or cloud rather
+# than a real fault. These are common and self-recover, so they are retried
+# inline and logged quietly instead of as warnings.
+# ApiUnavailableException covers AuthServiceUnavailableException, i.e. the login
+# endpoint being down, which says nothing about the credentials.
+TRANSIENT_ERRORS = (
+    DeviceTimeoutException,
+    GatewayOfflineException,
+    TokenExpiredException,
+    ApiUnavailableException,
+    httpx.TransportError,
+)
+
+# A rejected login only becomes a reauth prompt once it has persisted for both
+# this many updates and this long. The cloud hands out spurious 401s during its
+# own outages, and reauth stops polling entirely until a human notices.
+AUTH_FAILURE_THRESHOLD = 3
+AUTH_FAILURE_GRACE = 15 * 60
+
+# Auth-failure bookkeeping lives here rather than on the coordinator: a failed
+# setup builds a new coordinator on every retry, which would otherwise reset the
+# grace period and make it unreachable.
+AUTH_STATE_KEY = f"{DOMAIN}_auth_state"
 
 MODE_STRING_TO_KEY = {
     "self_use": MODE_SELF_CONSUMPTION,
@@ -35,14 +68,6 @@ MODE_STRING_TO_KEY = {
     "clean_backup": MODE_EMERGENCY_BACKUP,
     "time_of_use": MODE_TIME_OF_USE,
 }
-
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.httpx_client import get_async_client
-from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -240,8 +265,9 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                         apower.apower_sn
                     )
 
-            # Reset failure counter on success
+            # Reset failure counters on success
             self._consecutive_failures = 0
+            self._auth_state().clear()
 
             return FranklinWHData(
                 stats=stats,
@@ -253,18 +279,21 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                 charge_power_details=charge_power_details,
             )
 
-        except Exception as err:
-            # Authentication failures should trigger reauth, not retries.
-            err_text = str(err).lower()
-            type_name = type(err).__name__
-            if (
-                "auth" in err_text
-                or "token" in err_text
-                or "AuthenticationError" in type_name
-                or "InvalidCredentials" in type_name
-            ):
-                raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
+        except InvalidCredentialsException as err:
+            return self._handle_auth_failure(err)
 
+        except AccountLockedException as err:
+            # A lockout is usually the cloud rate-limiting us, and re-entering
+            # the same credentials cannot clear one, so back off rather than
+            # prompt. It still counts toward the grace period: if the lock
+            # followed genuinely bad credentials, the first rejection after it
+            # expires escalates straight away.
+            _LOGGER.warning(
+                "FranklinWH account is temporarily locked, backing off: %s", err
+            )
+            return self._handle_auth_failure(err, escalate=False)
+
+        except Exception as err:
             return self._handle_update_failure(err)
 
     async def _get_stats_with_retry(self) -> Stats | None:
@@ -294,7 +323,52 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
         assert last_err is not None
         raise last_err
 
-    def _handle_update_failure(self, err: Exception) -> FranklinWHData:
+    def _auth_state(self) -> dict:
+        """Return the shared auth-failure bookkeeping for this config entry."""
+        store = self.hass.data.setdefault(AUTH_STATE_KEY, {})
+        key = self.config_entry.entry_id if self.config_entry else self.gateway_id
+        return store.setdefault(key, {})
+
+    def _handle_auth_failure(
+        self, err: Exception, escalate: bool = True
+    ) -> FranklinWHData:
+        """Account for the cloud rejecting our credentials.
+
+        Reauth stops polling until someone re-enters credentials by hand, so a
+        rejection is only escalated once it has outlived a transient upstream
+        problem. Until then it is treated as an ordinary failure and polling
+        continues, which is how a spurious 401 recovers on its own.
+        """
+        state = self._auth_state()
+        now = time.monotonic()
+        failures = state.get("failures", 0) + 1
+        first_at = state.setdefault("first_at", now)
+        state["failures"] = failures
+        elapsed = now - first_at
+
+        if not escalate:
+            return self._handle_update_failure(err, already_logged=True)
+
+        if failures >= AUTH_FAILURE_THRESHOLD and elapsed >= AUTH_FAILURE_GRACE:
+            raise ConfigEntryAuthFailed(
+                f"Credentials rejected {failures} times over "
+                f"{elapsed / 60:.0f} minutes: {err}"
+            )
+
+        _LOGGER.warning(
+            "Credentials rejected (%d/%d over %.0f of %.0f minutes), retrying before "
+            "asking for reauthentication: %s",
+            failures,
+            AUTH_FAILURE_THRESHOLD,
+            elapsed / 60,
+            AUTH_FAILURE_GRACE / 60,
+            err,
+        )
+        return self._handle_update_failure(err, already_logged=True)
+
+    def _handle_update_failure(
+        self, err: Exception, already_logged: bool = False
+    ) -> FranklinWHData:
         """Account for a failed update.
 
         While under the failure threshold (and we have prior data), the last
@@ -306,13 +380,14 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
         transient = isinstance(err, TRANSIENT_ERRORS)
 
         if self._consecutive_failures < self._max_failures and self.data is not None:
-            log = _LOGGER.debug if transient else _LOGGER.warning
-            log(
-                "API error (attempt %d/%d), keeping last known data: %s",
-                self._consecutive_failures,
-                self._max_failures,
-                err,
-            )
+            if not already_logged:
+                log = _LOGGER.debug if transient else _LOGGER.warning
+                log(
+                    "API error (attempt %d/%d), keeping last known data: %s",
+                    self._consecutive_failures,
+                    self._max_failures,
+                    err,
+                )
             return self.data
 
         _LOGGER.error(
