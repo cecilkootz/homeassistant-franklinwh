@@ -69,6 +69,14 @@ MODE_STRING_TO_KEY = {
     "time_of_use": MODE_TIME_OF_USE,
 }
 
+# Backup mode's reserve is fixed by the system; only these modes accept a new
+# reserve value.
+RESERVE_ADJUSTABLE_MODES = {
+    "self_use": Mode.self_consumption,
+    "self_consumption": Mode.self_consumption,
+    "time_of_use": Mode.time_of_use,
+}
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -524,8 +532,6 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
             time_of_use_reserve = reserve_percent
         elif mode_key == MODE_SELF_CONSUMPTION:
             self_consumption_reserve = reserve_percent
-        elif mode_key == MODE_EMERGENCY_BACKUP:
-            emergency_backup_reserve = reserve_percent
 
         self._set_updated_mode_status(
             ModeStatus(
@@ -542,19 +548,16 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
 
     async def async_set_mode_reserve(self, mode: str, reserve_percent: int) -> None:
         """Set reserve percentage for a specific mode."""
-        mode_map = {
-            "self_use": Mode.self_consumption,
-            "self_consumption": Mode.self_consumption,
-            "backup": Mode.emergency_backup,
-            "emergency_backup": Mode.emergency_backup,
-            "time_of_use": Mode.time_of_use,
-            "clean_backup": Mode.emergency_backup,
-        }
+        if mode in MODE_STRING_TO_KEY and mode not in RESERVE_ADJUSTABLE_MODES:
+            raise ValueError(
+                f"Reserve cannot be changed for mode {mode}; only self-consumption "
+                "and time of use reserves are adjustable"
+            )
 
-        if mode not in mode_map:
+        if mode not in RESERVE_ADJUSTABLE_MODES:
             raise ValueError(f"Invalid mode: {mode}")
 
-        mode_obj = mode_map[mode](soc=reserve_percent)
+        mode_obj = RESERVE_ADJUSTABLE_MODES[mode](soc=reserve_percent)
         await self.client.set_mode(mode_obj)
         self._set_updated_mode_reserve(mode, reserve_percent)
         await self.async_request_refresh()
@@ -580,10 +583,14 @@ class FranklinWHCoordinator(DataUpdateCoordinator[FranklinWHData]):
                 ) from err
 
             current_mode_key = current_mode[0]
+            if current_mode_key == MODE_EMERGENCY_BACKUP:
+                raise ValueError(
+                    "Reserve cannot be changed while the system is in backup mode"
+                )
+
             mode_factory = {
                 MODE_TIME_OF_USE: Mode.time_of_use,
                 MODE_SELF_CONSUMPTION: Mode.self_consumption,
-                MODE_EMERGENCY_BACKUP: Mode.emergency_backup,
             }.get(current_mode_key)
             if mode_factory is None:
                 raise RuntimeError(

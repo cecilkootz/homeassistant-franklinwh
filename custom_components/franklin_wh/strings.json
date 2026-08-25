@@ -72,7 +72,7 @@
     },
     "set_battery_reserve": {
       "name": "Set Battery Reserve",
-      "description": "Set the minimum battery reserve percentage.",
+      "description": "Set the minimum battery reserve percentage for the current mode. Fails while the system is in backup mode, whose reserve is not adjustable.",
       "fields": {
         "reserve_percent": {
           "name": "Reserve Percentage",
@@ -82,11 +82,11 @@
     },
     "set_mode_reserve": {
       "name": "Set Mode Reserve",
-      "description": "Set the reserve percentage for a specific mode.",
+      "description": "Set the reserve percentage for a specific mode. Only self use and time of use reserves are adjustable; backup mode's reserve is fixed.",
       "fields": {
         "mode": {
           "name": "Mode",
-          "description": "The mode to update."
+          "description": "The mode whose reserve value to update (self use or time of use)."
         },
         "reserve_percent": {
           "name": "Reserve Percentage",

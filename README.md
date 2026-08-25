@@ -162,7 +162,8 @@ data:
 
 ### `franklin_wh.set_battery_reserve`
 
-Set the minimum battery reserve percentage.
+Set the minimum battery reserve percentage for the current mode. Fails while the
+system is in backup mode — that mode's reserve is fixed.
 
 **Parameters:**
 - `reserve_percent`: Minimum battery charge to maintain (0-100)
@@ -172,6 +173,23 @@ Set the minimum battery reserve percentage.
 service: franklin_wh.set_battery_reserve
 data:
   reserve_percent: 20
+```
+
+### `franklin_wh.set_mode_reserve`
+
+Set the reserve percentage for a specific mode. Only self use and time of use
+reserves are adjustable.
+
+**Parameters:**
+- `mode`: Mode to update (`self_use`, `time_of_use`)
+- `reserve_percent`: Reserve to set for that mode (0-100)
+
+**Example:**
+```yaml
+service: franklin_wh.set_mode_reserve
+data:
+  mode: time_of_use
+  reserve_percent: 30
 ```
 
 ---

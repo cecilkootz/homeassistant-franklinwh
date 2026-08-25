@@ -127,7 +127,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             schema=vol.Schema(
                 {
                     vol.Required("mode"): vol.In(
-                        ["self_use", "backup", "time_of_use", "clean_backup"]
+                        ["self_use", "self_consumption", "time_of_use"]
                     ),
                     vol.Required("reserve_percent"): vol.All(
                         vol.Coerce(int),
