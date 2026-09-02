@@ -99,6 +99,13 @@ def _mode_label_from_data(data: FranklinWHData) -> str | None:
     return None
 
 
+def _solar_production(data: FranklinWHData) -> float | None:
+    """Return solar power, clamping the inverters' nighttime standby draw to zero."""
+    if data.stats is None or data.stats.current is None:
+        return None
+    return max(0.0, data.stats.current.solar_production)
+
+
 def _local_day_start(_: FranklinWHData) -> datetime:
     """Return local midnight for daily-reset energy counters."""
     return dt_util.start_of_local_day()
@@ -275,7 +282,7 @@ SENSOR_TYPES: tuple[FranklinWHSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: data.stats.current.solar_production if data.stats else None,
+        value_fn=_solar_production,
     ),
     FranklinWHSensorEntityDescription(
         key="solar_energy",
