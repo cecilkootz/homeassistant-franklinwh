@@ -16,3 +16,5 @@ jobs:
         uses: "hacs/action@main"
         with:
           category: "integration"
+          # GitHub reports the MIT + Apache-2.0 dual license as NOASSERTION
+          ignore: "license"
