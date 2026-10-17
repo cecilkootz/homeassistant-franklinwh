@@ -363,8 +363,8 @@ When reporting issues, please:
 ## 📄 License
 
 This project is dual-licensed under:
-- **MIT License**
-- **Apache License 2.0**
+- **MIT License** ([LICENSE-MIT](LICENSE-MIT))
+- **Apache License 2.0** ([LICENSE-APACHE](LICENSE-APACHE))
 
 You may choose either license when using or contributing to this project.
 
