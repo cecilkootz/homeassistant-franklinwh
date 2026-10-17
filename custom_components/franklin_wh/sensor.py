@@ -21,6 +21,7 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -616,12 +617,15 @@ class FranklinWHApowerBaseSensor(CoordinatorEntity[FranklinWHCoordinator], Senso
         self._apower_sn = apower_sn
         gateway_id = entry.data[CONF_GATEWAY_ID]
         short_sn = apower_sn[-6:]
+        gateway_device = dr.async_get(coordinator.hass).async_get_device(
+            identifiers={(DOMAIN, gateway_id)}
+        )
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, apower_sn)},
             name=f"FranklinWH Battery {short_sn}",
             manufacturer=MANUFACTURER,
             model="aPower",
-            via_device=(DOMAIN, gateway_id),
+            via_device_id=gateway_device.id,
         )
 
     def _get_apower(self) -> ApowerInfo | None:
